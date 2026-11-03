@@ -64,9 +64,12 @@ pub fn add_downloads(state: State<'_, AppState>, options: AddOptions) -> AddResu
     let mut added = Vec::new();
     let mut failed = Vec::new();
     for url in urls {
+        // Ajout par lots : les adresses de sites vidéo passent par yt-dlp (meilleure qualité).
+        let media = crate::media_cmds::batch_media_spec(&url);
         let req = AddRequest {
             url: url.clone(),
-            filename: filename.clone(),
+            filename: if media.is_some() { None } else { filename.clone() },
+            media,
             directory: options.directory.clone(),
             priority: options.priority,
             start_paused: options.start_paused,

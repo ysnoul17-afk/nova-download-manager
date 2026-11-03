@@ -109,7 +109,9 @@ try {
     if (-not $SkipTests) {
         Step "Tests du moteur de téléchargement"
         cargo test -p ndm-engine --release
-        if ($LASTEXITCODE -ne 0) { throw "Des tests du moteur ont échoué." }
+        if ($LASTEXITCODE -ne 0) {
+            throw "La compilation ou les tests du moteur ont échoué. Si le message mentionne « os error 4551 », désactivez le Contrôle intelligent des applications (voir docs\BUILD-WINDOWS.md)."
+        }
         Ok "Tests réussis"
     }
 

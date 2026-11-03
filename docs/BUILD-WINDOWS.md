@@ -22,6 +22,18 @@ Si le script s'arrête après avoir installé des outils, fermez PowerShell, rou
 
 Il lance ensuite les tests du moteur, puis la compilation. La première compilation prend 5 à 15 minutes.
 
+## Erreur « os error 4551 » : Contrôle intelligent des applications
+
+Si la compilation échoue avec « Une stratégie de contrôle d'application a bloqué ce fichier (os error 4551) »,
+c'est le **Contrôle intelligent des applications** (Smart App Control) de Windows 11 qui bloque les programmes
+non signés produits par le compilateur. Pour compiler :
+
+1. `Windows + R`, puis `windowsdefender://appbrowser`.
+2. **Paramètres du contrôle intelligent des applications** → **Désactivé**.
+
+Depuis la mise à jour cumulative d'avril 2026 (KB5083769), il peut être réactivé au même endroit. Tant que NDM
+n'est pas signé numériquement, il est lui aussi bloqué lorsque cette protection est active.
+
 ## Résultat
 
 ```
@@ -32,6 +44,11 @@ target\release\bundle\msi\Nova Download Manager_0.1.0_x64_fr-FR.msi       instal
 
 L'installateur NSIS s'installe pour l'utilisateur courant, sans droits administrateur. La désinstallation
 se fait depuis « Paramètres > Applications ».
+
+## Mettre à jour une installation existante
+
+Quittez NDM (icône de la zone de notification → **Quitter**), relancez le script puis l'installateur : il
+remplace l'ancienne version et conserve l'historique et les réglages.
 
 ## Méthode manuelle
 
@@ -53,5 +70,5 @@ Les fichiers sont enregistrés par défaut dans `Téléchargements\NDM\<catégor
 - L'installateur n'est pas signé numériquement : Windows SmartScreen affichera un avertissement au premier
   lancement (« Informations complémentaires » puis « Exécuter quand même »). La signature et les mises à
   jour automatiques signées sont prévues en phase 6.
-- Testé sous Linux (application complète, interface comprise). La compilation Windows n'a pas pu être
-  vérifiée dans l'environnement de développement : le premier passage du script fait foi.
+- Les tests vidéo de bout en bout (`crates/ndm-engine/tests/media.rs`) ne s'exécutent que si la variable
+  `NDM_TEST_YTDLP` pointe vers yt-dlp et que `ffmpeg` est dans le PATH ; sinon ils sont sautés.

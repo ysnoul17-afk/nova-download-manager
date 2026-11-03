@@ -1,16 +1,26 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { api, type Priority } from "../api";
+import { api, type MediaInfo, type MediaSpec, type Priority } from "../api";
 import { errorText, PRIORITY_LABEL } from "../format";
 import { Modal, useToast } from "./common";
+import { MediaPicker } from "./MediaPicker";
+import { ToolsPanel } from "./ToolsPanel";
 
 /** Extrait les URL http(s) d'un texte collé (une par ligne, ou mêlées à du texte). */
-function extractUrls(text: string): string[] {
+export function extractUrls(text: string): string[] {
   // S'arrête aussi au début d'une autre adresse : « …/a.zipHttps://…/b.zip » donne deux adresses.
   const found = text.match(/https?:\/\/[^\s"'<>]+?(?=https?:\/\/|[\s"'<>]|$)/gi) ?? [];
   return [...new Set(found.map((u) => u.replace(/[),.;]+$/, "")))];
 }
+
+type Step =
+  | { kind: "input" }
+  | { kind: "analyzing" }
+  | { kind: "media"; info: MediaInfo }
+  | { kind: "tools" }
+  | { kind: "page"; message: string }
+  | { kind: "error"; message: string };
 
 export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; initialText?: string }) {
   const toast = useToast();
@@ -20,6 +30,7 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
   const [priority, setPriority] = useState<Priority>("normal");
   const [startPaused, setStartPaused] = useState(false);
   const [connections, setConnections] = useState<number | null>(null);
+  const [step, setStep] = useState<Step>({ kind: "input" });
   const [busy, setBusy] = useState(false);
 
   const urls = useMemo(() => extractUrls(text), [text]);
@@ -30,8 +41,8 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
     if (typeof dir === "string") setDirectory(dir);
   };
 
-  const submit = async () => {
-    if (urls.length === 0) return;
+  /** Ajout direct (fichiers, ou lots : les sites vidéo connus passent par yt-dlp). */
+  const addFiles = async () => {
     setBusy(true);
     try {
       const res = await api.add({
@@ -42,9 +53,7 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
         startPaused,
         connections,
       });
-      if (res.failed.length) {
-        toast(res.failed.map((f) => `${f.url} : ${f.error}`).join("\n"), "error");
-      }
+      if (res.failed.length) toast(res.failed.map((f) => `${f.url} : ${f.error}`).join("\n"), "error");
       if (res.added.length) {
         toast(res.added.length === 1 ? "Téléchargement ajouté." : `${res.added.length} téléchargements ajoutés.`);
         onClose();
@@ -56,6 +65,130 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
     }
   };
 
+  /** Une seule adresse : on regarde d'abord s'il s'agit d'un fichier ou d'une page vidéo. */
+  const analyze = async () => {
+    setStep({ kind: "analyzing" });
+    try {
+      const r = await api.analyzeUrl(urls[0]);
+      switch (r.kind) {
+        case "file":
+          await addFiles();
+          setStep({ kind: "input" });
+          return;
+        case "media":
+          setStep({ kind: "media", info: r.info });
+          return;
+        case "needs_tools":
+          setStep({ kind: "tools" });
+          return;
+        case "page":
+          setStep({ kind: "page", message: r.message });
+          return;
+        case "error":
+          setStep({ kind: "error", message: r.message });
+          return;
+      }
+    } catch (e) {
+      setStep({ kind: "error", message: errorText(e) });
+    }
+  };
+
+  const submit = () => {
+    if (urls.length === 0 || busy) return;
+    // Un nom de fichier imposé signifie un fichier direct.
+    if (single && !filename.trim()) analyze();
+    else addFiles();
+  };
+
+  const addMedia = async (spec: MediaSpec) => {
+    setBusy(true);
+    try {
+      await api.addMedia({ url: urls[0], spec, directory, priority, startPaused });
+      toast(`Vidéo ajoutée : ${spec.label}.`);
+      onClose();
+    } catch (e) {
+      toast(errorText(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // --- Étapes après analyse -------------------------------------------------
+
+  if (step.kind === "media") {
+    return (
+      <Modal
+        title="Télécharger cette vidéo"
+        onClose={onClose}
+        wide
+        footer={
+          <>
+            <button className="btn btn-ghost grow-left" onClick={() => setStep({ kind: "input" })}>
+              Retour
+            </button>
+            <button className="btn" onClick={onClose}>
+              Annuler
+            </button>
+            <button className="btn btn-primary" type="submit" form="media-picker" disabled={busy} data-autofocus>
+              Télécharger
+            </button>
+          </>
+        }
+      >
+        <MediaPicker info={step.info} onChoose={addMedia} />
+      </Modal>
+    );
+  }
+
+  if (step.kind === "tools") {
+    return (
+      <Modal
+        title="Installer les outils vidéo"
+        onClose={onClose}
+        footer={
+          <>
+            <button className="btn btn-ghost grow-left" onClick={() => setStep({ kind: "input" })}>
+              Retour
+            </button>
+            <button className="btn" onClick={onClose}>
+              Plus tard
+            </button>
+          </>
+        }
+      >
+        <ToolsPanel compact onReady={analyze} />
+      </Modal>
+    );
+  }
+
+  if (step.kind === "page" || step.kind === "error") {
+    return (
+      <Modal
+        title={step.kind === "page" ? "Aucune vidéo sur cette page" : "Analyse impossible"}
+        onClose={onClose}
+        footer={
+          <>
+            <button className="btn btn-ghost grow-left" onClick={() => setStep({ kind: "input" })}>
+              Retour
+            </button>
+            <button className="btn" onClick={addFiles} disabled={busy}>
+              {step.kind === "page" ? "Enregistrer la page web" : "Télécharger quand même"}
+            </button>
+            <button className="btn btn-primary" onClick={onClose} data-autofocus>
+              Fermer
+            </button>
+          </>
+        }
+      >
+        <p>{step.message}</p>
+        <p className="muted">{urls[0]}</p>
+      </Modal>
+    );
+  }
+
+  // --- Saisie ---------------------------------------------------------------
+
+  const analyzing = step.kind === "analyzing";
   return (
     <Modal
       title="Ajouter des téléchargements"
@@ -64,35 +197,48 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
       footer={
         <>
           <span className="muted grow">
-            {urls.length === 0 ? "Aucune adresse détectée" : urls.length === 1 ? "1 adresse" : `${urls.length} adresses`}
+            {analyzing
+              ? "Analyse de l'adresse…"
+              : urls.length === 0
+                ? "Aucune adresse détectée"
+                : urls.length === 1
+                  ? "1 adresse"
+                  : `${urls.length} adresses`}
           </span>
           <button className="btn" onClick={onClose}>
             Annuler
           </button>
-          <button className="btn btn-primary" disabled={urls.length === 0 || busy} onClick={submit}>
+          <button className="btn btn-primary" disabled={urls.length === 0 || busy || analyzing} onClick={submit}>
+            {analyzing && <Loader2 size={16} className="spin" />}
             {startPaused ? "Ajouter en pause" : "Télécharger"}
           </button>
         </>
       }
     >
       <label className="field">
-        <span>Adresses (une par ligne, ou collez un texte qui en contient)</span>
+        <span>Adresses de fichiers ou de vidéos (une par ligne)</span>
         <textarea
           data-autofocus
           rows={5}
           value={text}
           spellCheck={false}
-          placeholder="https://exemple.com/fichier.zip"
+          disabled={analyzing}
+          placeholder="https://exemple.com/fichier.zip ou https://www.youtube.com/watch?v=…"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit();
           }}
         />
       </label>
+      {urls.length > 1 && (
+        <p className="setting-hint">
+          En lot, les vidéos des sites reconnus (YouTube, Vimeo…) sont téléchargées en meilleure qualité MP4.
+        </p>
+      )}
 
       {single && (
         <label className="field">
-          <span>Nom du fichier (facultatif)</span>
+          <span>Nom du fichier (facultatif, fichiers uniquement)</span>
           <input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="Déduit automatiquement" />
         </label>
       )}
@@ -124,7 +270,7 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
           </select>
         </label>
         <label className="field">
-          <span>Connexions</span>
+          <span>Connexions (fichiers)</span>
           <select
             value={connections ?? ""}
             onChange={(e) => setConnections(e.target.value ? Number(e.target.value) : null)}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, CATEGORIES, type Category, type EngineConfig, type UiSettings } from "../api";
 import { CATEGORY_LABEL, errorText } from "../format";
 import { CategoryIcon, useToast } from "./common";
+import { ToolsPanel } from "./ToolsPanel";
 
 export function SettingsView({ ui, onUiChange }: { ui: UiSettings; onUiChange: (s: UiSettings) => void }) {
   const toast = useToast();
@@ -198,6 +199,11 @@ export function SettingsView({ ui, onUiChange }: { ui: UiSettings; onUiChange: (
                 </div>
               );
             })}
+        </section>
+
+        <section className="panel">
+          <h2>Outils vidéo</h2>
+          <ToolsPanel />
         </section>
 
         {info && (

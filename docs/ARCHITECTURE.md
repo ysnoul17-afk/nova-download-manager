@@ -44,7 +44,7 @@ nova-download-manager/
 | **`apps/desktop`** | Application Tauri : interface, commandes, zone de notification | Fait, testé sous Linux |
 | `apps/browser-extension` | Extension MV3 Chrome/Edge | Phase 3 |
 | `crates/ndm-native-host` | Hôte Native Messaging | Phase 4 |
-| `crates/ndm-media` | yt-dlp, FFmpeg, HLS/DASH | Phase 5 |
+| **`ndm-engine::media` et `::tools`** | yt-dlp, FFmpeg, HLS/DASH, installation vérifiée | Fait, testé |
 | `packages/shared-types` | Types partagés extension ↔ application | Phase 3 |
 
 **Écart avec la structure suggérée, et pourquoi.** Le cahier des charges proposait `packages/download-core`
@@ -109,6 +109,27 @@ noms réservés Windows comme `CON`, longueur), aucune séparation de chemin pos
 de destination : chemins absolus uniquement, `..` refusé. Recherche SQL paramétrée. L'interface ne peut
 ouvrir un fichier que par son identifiant de téléchargement, jamais par un chemin libre, et une
 confirmation est demandée avant d'ouvrir un programme. Aucun fichier n'est exécuté automatiquement.
+
+## Vidéo (`media.rs`, `tools.rs`)
+
+**Analyse.** `yt-dlp -J` renvoie les formats d'une page. NDM en tire des options simples : une par résolution
+(meilleur flux vidéo à cette hauteur, plus la meilleure piste audio si elle est séparée), plus l'audio seul en
+MP3 et M4A. La taille de chaque option est estimée (taille annoncée, sinon débit × durée). Les formats marqués
+DRM sont écartés ; si tous le sont, la vidéo est refusée avec une explication. Listes de lecture et directs sont
+refusés explicitement pour l'instant.
+
+**Téléchargement.** Une vidéo est un téléchargement comme un autre dans le moteur (file d'attente, priorité,
+pause, historique). yt-dlp est lancé sans console, dans son propre groupe de processus : la pause arrête tout
+l'arbre de processus (`taskkill /T` sous Windows), et la reprise relance yt-dlp qui continue ses fichiers
+partiels. La progression est lue sur une ligne formatée par `--progress-template`, en suivant les flux
+successifs (piste vidéo, piste audio) puis les étapes FFmpeg (fusion, conversion, sous-titres). Le nom final est
+choisi par NDM (titre nettoyé, sans collision), et les fichiers intermédiaires sont supprimés en cas d'abandon.
+
+**Outils.** yt-dlp et FFmpeg ne sont pas embarqués dans l'installateur : ils évoluent trop vite (yt-dlp suit
+les changements de YouTube). NDM les télécharge à la demande depuis leurs dépôts GitHub officiels et compare
+leur SHA-256 au fichier de sommes publié avec la version ; en cas d'écart, rien n'est installé. Seuls
+`ffmpeg.exe` et `ffprobe.exe` sont extraits de l'archive, sous des noms fixés par NDM. Les outils déjà présents
+sur le système (PATH) sont aussi détectés.
 
 ## Application (`apps/desktop`)
 

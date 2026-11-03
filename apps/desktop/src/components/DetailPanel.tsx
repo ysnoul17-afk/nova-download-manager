@@ -59,7 +59,9 @@ export function DetailPanel({
         </div>
         <SegmentMap item={item} />
         <div className="detail-legend muted">
-          {item.status === "downloading" && item.active_connections === 0
+          {item.media_label && isActive(item.status)
+            ? `${item.stage ?? "Analyse de la vidéo"}${item.status === "finalizing" ? "…" : ""}`
+            : item.status === "downloading" && item.active_connections === 0
             ? "Connexion perdue : nouvelle tentative automatique…"
             : isActive(item.status)
             ? `${item.active_connections} connexion${item.active_connections > 1 ? "s" : ""} active${item.active_connections > 1 ? "s" : ""} sur ${item.max_connections}`
@@ -80,6 +82,12 @@ export function DetailPanel({
         <dd className="num">{isActive(item.status) ? formatEta(item.eta_secs) : "—"}</dd>
         <dt>Type</dt>
         <dd>{CATEGORY_LABEL[item.category]}</dd>
+        {item.media_label && (
+          <>
+            <dt>Qualité</dt>
+            <dd>{item.media_label}</dd>
+          </>
+        )}
         <dt>Ajouté</dt>
         <dd>{formatDate(item.added_at)}</dd>
         {item.completed_at && (

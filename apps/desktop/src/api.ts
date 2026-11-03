@@ -39,6 +39,8 @@ export interface DownloadInfo {
   added_at: number;
   completed_at: number | null;
   seq: number;
+  media_label: string | null;
+  stage: string | null;
 }
 
 export type EngineEvent =
@@ -101,6 +103,71 @@ export interface AddResult {
   failed: { url: string; error: string }[];
 }
 
+// --- Vidéo ------------------------------------------------------------------
+
+export type MediaFormat =
+  | { type: "best" }
+  | { type: "video"; max_height: number }
+  | { type: "audio_mp3" }
+  | { type: "audio_m4a" };
+
+export interface MediaOption {
+  id: string;
+  label: string;
+  container: string;
+  format: MediaFormat;
+  est_size: number | null;
+}
+
+export interface MediaInfo {
+  url: string;
+  title: string;
+  duration_secs: number | null;
+  thumbnail: string | null;
+  uploader: string | null;
+  site: string | null;
+  options: MediaOption[];
+  subtitle_langs: string[];
+  drm_filtered: boolean;
+}
+
+export interface MediaSpec {
+  format: MediaFormat;
+  subtitles: boolean;
+  label: string;
+  title: string;
+  est_size: number | null;
+}
+
+export type Tool = "yt_dlp" | "ffmpeg";
+
+export interface ToolInfo {
+  path: string;
+  version: string | null;
+  managed: boolean;
+}
+
+export interface ToolsStatus {
+  ytdlp: ToolInfo | null;
+  ffmpeg: ToolInfo | null;
+  ffmpeg_installable: boolean;
+}
+
+export interface ToolProgress {
+  tool: Tool;
+  phase: "download" | "done" | "error";
+  downloaded: number;
+  total: number | null;
+  error: string | null;
+}
+
+export type UrlAnalysis =
+  | { kind: "file"; filename: string | null; size: number | null; mime: string | null }
+  | { kind: "media"; info: MediaInfo }
+  | { kind: "page"; message: string }
+  | { kind: "needs_tools"; missing: Tool[] }
+  | { kind: "error"; message: string };
+
 export const api = {
   list: () => invoke<DownloadInfo[]>("list_downloads"),
   add: (options: AddOptions) => invoke<AddResult>("add_downloads", { options }),
@@ -122,8 +189,14 @@ export const api = {
   getUi: () => invoke<UiSettings>("get_ui_settings"),
   setUi: (settings: UiSettings) => invoke<void>("set_ui_settings", { settings }),
   categoryDirs: () => invoke<Record<Category, string>>("get_category_directories"),
+  analyzeUrl: (url: string) => invoke<UrlAnalysis>("analyze_url", { url }),
+  addMedia: (options: { url: string; spec: MediaSpec; directory?: string | null; priority?: Priority; startPaused?: boolean }) =>
+    invoke<DownloadInfo>("add_media", { options }),
+  toolsStatus: () => invoke<ToolsStatus>("tools_status"),
+  installTools: (which: Tool[]) => invoke<ToolsStatus>("install_tools", { which }),
   appInfo: () => invoke<{ version: string; data_dir: string }>("app_info"),
 };
 
 export const EVENT_ENGINE = "ndm://engine";
 export const EVENT_RESYNC = "ndm://resync";
+export const EVENT_TOOLS = "ndm://tools";

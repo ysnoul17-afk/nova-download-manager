@@ -273,8 +273,10 @@ function Row({
       ? d.error
       : reconnecting
         ? `Reconnexion au serveur… (${formatBytes(d.downloaded)} sur ${formatBytes(d.total_size)})`
+        : d.status === "finalizing" && d.stage
+        ? `${d.stage}…`
         : d.status === "downloading"
-        ? `${formatBytes(d.downloaded)} sur ${formatBytes(d.total_size)}`
+        ? `${d.stage ? `${d.stage} : ` : ""}${formatBytes(d.downloaded)} sur ${d.media_label && d.total_size ? "≈ " : ""}${formatBytes(d.total_size)}`
         : d.status === "completed"
           ? formatBytes(d.total_size)
           : `${STATUS_LABEL[d.status]}${d.total_size ? `, ${formatBytes(d.downloaded)} sur ${formatBytes(d.total_size)}` : ""}`;
@@ -291,6 +293,7 @@ function Row({
       <div className="dl-name">
         <div className="dl-filename" title={d.filename}>
           {d.filename || hostOf(d.url)}
+          {d.media_label && <span className="media-tag">{d.media_label}</span>}
           {d.priority !== "normal" && <span className={`prio prio-${d.priority}`}>{PRIORITY_LABEL[d.priority]}</span>}
         </div>
         <div className={`dl-sub ${d.status === "failed" ? "is-error" : ""}`} title={sub}>

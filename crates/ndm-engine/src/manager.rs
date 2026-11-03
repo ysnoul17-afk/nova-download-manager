@@ -1,6 +1,6 @@
 //! Gestionnaire : file d'attente, priorités, persistance SQLite et diffusion d'événements.
 
-use crate::download::{self, part_path, DownloadRecord, DownloadShared, EngineCtx, Validator};
+use crate::download::{self, DownloadRecord, DownloadShared, EngineCtx, Validator};
 use crate::error::{EngineError, Result};
 use crate::filename;
 use crate::store::{HistoryQuery, Store};
@@ -87,6 +87,8 @@ impl Entry {
             added_at: r.added_at,
             completed_at: r.completed_at,
             seq: r.seq,
+            media_label: r.media.as_ref().map(|m| m.label.clone()),
+            stage: r.stage.map(|s| s.label().to_string()),
         }
     }
 }
@@ -158,6 +160,31 @@ impl Engine {
         Ok(Self { inner })
     }
 
+    /// Indique au moteur où trouver yt-dlp et FFmpeg.
+    pub fn set_media_tools(&self, tools: crate::media::MediaTools) {
+        *self.inner.ctx.media_tools.write() = tools;
+    }
+
+    pub fn media_tools(&self) -> crate::media::MediaTools {
+        self.inner.ctx.media_tools.read().clone()
+    }
+
+    /// Client HTTP du moteur (réutilisé pour l'installation des outils).
+    pub fn http_client(&self) -> reqwest::Client {
+        self.inner.ctx.client.clone()
+    }
+
+    /// Analyse rapide d'une adresse : fichier téléchargeable ou page web ?
+    pub async fn inspect(&self, url: &str) -> Result<download::ProbeResult> {
+        download::probe(&self.inner.ctx, url, &Default::default()).await
+    }
+
+    /// Analyse une page vidéo avec yt-dlp (qualités disponibles, titre, durée…).
+    pub async fn analyze_media(&self, url: &str) -> Result<crate::media::MediaInfo> {
+        let tools = self.media_tools();
+        crate::media::analyze(&tools, url, &CancellationToken::new()).await
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
         self.inner.events.subscribe()
     }
@@ -225,8 +252,18 @@ impl Engine {
         if url.host_str().unwrap_or("").is_empty() {
             return Err(EngineError::InvalidUrl(req.url.clone()));
         }
-        let filename = req.filename.as_deref().map(filename::sanitize).unwrap_or_default();
-        let category = if filename.is_empty() { Category::Other } else { filename::categorize(&filename) };
+        // Pour une vidéo, le nom est fixé plus tard à partir du titre.
+        let filename = if req.media.is_some() {
+            String::new()
+        } else {
+            req.filename.as_deref().map(filename::sanitize).unwrap_or_default()
+        };
+        let category = match &req.media {
+            Some(m) if m.format.is_audio() => Category::Music,
+            Some(_) => Category::Video,
+            None if filename.is_empty() => Category::Other,
+            None => filename::categorize(&filename),
+        };
         let directory = match &req.directory {
             Some(d) => validate_directory(d)?,
             None => self.inner.ctx.config.read().directory_for(category),
@@ -258,6 +295,8 @@ impl Engine {
             seq: self.inner.seq.fetch_add(1, Ordering::Relaxed),
             active_ms: 0,
             avg_speed: None,
+            media: req.media,
+            stage: None,
         };
         let id = record.id;
         let entry = Arc::new(Entry::new(record));
@@ -300,8 +339,8 @@ impl Engine {
         wait_task(&e).await;
         {
             let mut r = e.shared.record.lock();
-            if let Some(p) = r.final_path() {
-                let _ = std::fs::remove_file(part_path(&p));
+            if r.status != DownloadStatus::Completed {
+                r.remove_partials();
             }
             r.reset_progress();
             r.completed_at = None;
@@ -328,9 +367,11 @@ impl Engine {
         wait_task(&e).await;
         {
             let r = e.shared.record.lock();
+            // Les fichiers partiels n'ont d'utilité qu'avec l'entrée : on les supprime toujours.
+            if r.status != DownloadStatus::Completed {
+                r.remove_partials();
+            }
             if let Some(p) = r.final_path() {
-                // Le partiel n'a d'utilité qu'avec l'entrée : on le supprime toujours.
-                let _ = std::fs::remove_file(part_path(&p));
                 if delete_file && r.status == DownloadStatus::Completed {
                     let _ = std::fs::remove_file(&p);
                 }

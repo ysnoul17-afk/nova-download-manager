@@ -12,6 +12,20 @@
 Les fichiers sont classés automatiquement par type (Vidéos, Musique, Documents, Images, Archives,
 Logiciels, Autres), chacun dans son dossier. Si un fichier du même nom existe déjà, NDM ajoute « (1) ».
 
+## Télécharger une vidéo
+
+Collez l'adresse d'une page vidéo (YouTube, Vimeo, Dailymotion…) ou d'un flux `.m3u8` / `.mpd`, puis
+**Télécharger**. NDM analyse la page et propose les qualités réellement disponibles (1080p, 720p…) avec leur
+taille estimée, ainsi que l'audio seul en MP3 ou M4A. L'image et le son, souvent séparés, sont assemblés
+automatiquement. Les sous-titres français ou anglais peuvent être intégrés à la vidéo.
+
+La première fois, NDM propose d'installer **yt-dlp** et **FFmpeg**, deux logiciels libres téléchargés depuis
+leurs dépôts officiels et vérifiés par empreinte. Ils se mettent à jour dans **Paramètres > Outils vidéo** :
+si un site cesse de fonctionner, une mise à jour de yt-dlp suffit généralement.
+
+Ne sont pas téléchargeables : les vidéos protégées par DRM (Netflix, Disney+…), les directs, et pour l'instant
+les listes de lecture. Respectez les conditions d'utilisation des sites et les droits des auteurs.
+
 ## Gérer les téléchargements
 
 | Action | Souris | Clavier |

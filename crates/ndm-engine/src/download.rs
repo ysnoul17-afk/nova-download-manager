@@ -94,6 +94,11 @@ pub struct DownloadRecord {
     /// Vitesse moyenne constatée à la fin (octets/s).
     #[serde(default)]
     pub avg_speed: Option<u64>,
+    /// Téléchargement vidéo (yt-dlp).
+    #[serde(default)]
+    pub media: Option<crate::media::MediaSpec>,
+    #[serde(default)]
+    pub stage: Option<crate::media::Stage>,
 }
 
 impl DownloadRecord {
@@ -111,7 +116,27 @@ impl DownloadRecord {
             .sum()
     }
 
+    /// Base des fichiers yt-dlp (dossier + nom sans extension).
+    pub fn media_stem(&self) -> Option<PathBuf> {
+        let p = self.final_path()?;
+        let stem = p.file_stem()?.to_os_string();
+        Some(p.with_file_name(stem))
+    }
+
+    /// Supprime les fichiers temporaires (partiel HTTP ou fichiers intermédiaires yt-dlp).
+    pub fn remove_partials(&self) {
+        if let Some(p) = self.final_path() {
+            let _ = std::fs::remove_file(part_path(&p));
+        }
+        if self.media.is_some() {
+            if let Some(stem) = self.media_stem() {
+                crate::media::cleanup_partials(&stem);
+            }
+        }
+    }
+
     pub fn reset_progress(&mut self) {
+        self.stage = None;
         self.segments.clear();
         self.total_size = None;
         self.resumable = false;
@@ -145,6 +170,7 @@ pub struct EngineCtx {
     pub client: Client,
     pub config: RwLock<EngineConfig>,
     pub global_limiter: RateLimiter,
+    pub media_tools: RwLock<crate::media::MediaTools>,
 }
 
 impl EngineCtx {
@@ -158,6 +184,7 @@ impl EngineCtx {
             .build()?;
         Ok(Self {
             global_limiter: RateLimiter::new(config.global_speed_limit),
+            media_tools: RwLock::new(Default::default()),
             client,
             config: RwLock::new(config),
         })
@@ -297,6 +324,9 @@ pub async fn run(
     cancel: CancellationToken,
     name_taken: impl Fn(&Path) -> bool,
 ) -> Result<()> {
+    if shared.record.lock().media.is_some() {
+        return run_media(shared, ctx, cancel, name_taken).await;
+    }
     let (url, headers) = {
         let r = shared.record.lock();
         (r.url.clone(), r.headers.clone())
@@ -460,6 +490,115 @@ pub async fn run(
         p
     };
     std::fs::rename(&part, &final_path)?;
+    Ok(())
+}
+
+/// Téléchargement d'une vidéo par yt-dlp : même file d'attente, même suivi, même reprise.
+async fn run_media(
+    shared: Arc<DownloadShared>,
+    ctx: Arc<EngineCtx>,
+    cancel: CancellationToken,
+    name_taken: impl Fn(&Path) -> bool,
+) -> Result<()> {
+    use crate::media::{self, MediaProgress, Stage};
+
+    let tools = ctx.media_tools.read().clone();
+    if tools.ytdlp.is_none() {
+        return Err(EngineError::Other(
+            "yt-dlp n'est pas installé. Installez-le dans Paramètres > Outils vidéo, puis reprenez.".into(),
+        ));
+    }
+    if tools.ffmpeg_dir.is_none() {
+        return Err(EngineError::Other(
+            "FFmpeg est nécessaire pour assembler les vidéos. Installez-le dans Paramètres > Outils vidéo, puis reprenez.".into(),
+        ));
+    }
+
+    let (url, mut spec) = {
+        let r = shared.record.lock();
+        (r.url.clone(), r.media.clone().expect("vidéo"))
+    };
+
+    // Ajout par lots sans analyse préalable : on récupère le titre maintenant.
+    if spec.title.trim().is_empty() {
+        let info = media::analyze(&tools, &url, &cancel).await?;
+        spec.title = info.title;
+        if spec.est_size.is_none() {
+            spec.est_size = info.options.iter().find(|o| o.format == spec.format).and_then(|o| o.est_size);
+        }
+        shared.record.lock().media = Some(spec.clone());
+    }
+
+    let stem = {
+        let cfg = ctx.config.read().clone();
+        let mut r = shared.record.lock();
+        if r.filename.is_empty() {
+            let mut title: String = spec.title.chars().take(150).collect();
+            if title.trim().is_empty() {
+                title = "video".into();
+            }
+            let name = filename::sanitize(&format!("{}.{}", title.trim(), spec.format.extension()));
+            r.category = if spec.format.is_audio() { Category::Music } else { Category::Video };
+            if !r.directory_locked {
+                r.directory = cfg.directory_for(r.category);
+            }
+            std::fs::create_dir_all(&r.directory)?;
+            let unique = filename::unique_path(&r.directory, &name, &name_taken);
+            r.filename = unique.file_name().unwrap().to_string_lossy().into_owned();
+        } else {
+            std::fs::create_dir_all(&r.directory)?;
+        }
+        r.status = DownloadStatus::Downloading;
+        r.error = None;
+        r.resumable = true;
+        r.total_size = spec.est_size;
+        r.stage = None;
+        r.segments = vec![Segment { start: 0, end: spec.est_size.map(|t| t.saturating_sub(1)), downloaded: 0, active: true }];
+        r.media_stem().expect("nom défini")
+    };
+
+    let rate = [ctx.global_limiter.rate(), shared.limiter.rate()].into_iter().filter(|r| *r > 0).min().unwrap_or(0);
+    shared.active_connections.store(1, Ordering::Relaxed);
+    let sh = shared.clone();
+    let mut last_done = 0u64;
+    let result = media::download(&tools, &url, &spec, &stem, rate, &cancel, move |p| {
+        let mut r = sh.record.lock();
+        match p {
+            MediaProgress::Bytes { done, total, stage } => {
+                if done > last_done {
+                    sh.received.fetch_add(done - last_done, Ordering::Relaxed);
+                }
+                last_done = done;
+                r.total_size = total.or(r.total_size);
+                let end = r.total_size.map(|t| t.max(done).saturating_sub(1));
+                r.segments = vec![Segment { start: 0, end, downloaded: done, active: true }];
+                r.stage = Some(stage);
+                if r.status == DownloadStatus::Finalizing {
+                    r.status = DownloadStatus::Downloading;
+                }
+            }
+            MediaProgress::Stage(s) => {
+                r.stage = Some(s);
+                if matches!(s, Stage::Merge | Stage::ConvertAudio | Stage::Subtitles | Stage::Finishing) {
+                    r.status = DownloadStatus::Finalizing;
+                }
+            }
+            MediaProgress::Done(_) => r.stage = Some(Stage::Finishing),
+        }
+    })
+    .await;
+    shared.active_connections.store(0, Ordering::Relaxed);
+
+    let path = result?;
+    let len = std::fs::metadata(&path)?.len();
+    let mut r = shared.record.lock();
+    if let (Some(name), Some(dir)) = (path.file_name(), path.parent()) {
+        r.filename = name.to_string_lossy().into_owned();
+        r.directory = dir.to_path_buf();
+    }
+    r.total_size = Some(len);
+    r.segments = vec![Segment { start: 0, end: len.checked_sub(1), downloaded: len, active: false }];
+    r.stage = None;
     Ok(())
 }
 

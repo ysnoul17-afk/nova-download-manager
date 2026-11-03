@@ -128,6 +128,9 @@ pub struct AddRequest {
     pub connections: Option<u8>,
     /// Taille connue à l'avance (ex. fournie par le navigateur), purement indicative.
     pub size_hint: Option<u64>,
+    /// Téléchargement vidéo via yt-dlp (sinon téléchargement HTTP direct).
+    #[serde(default)]
+    pub media: Option<crate::media::MediaSpec>,
 }
 
 /// Instantané d'un téléchargement, sérialisable pour l'UI.
@@ -161,6 +164,10 @@ pub struct DownloadInfo {
     pub completed_at: Option<u64>,
     /// Ordre d'ajout (strictement croissant).
     pub seq: u64,
+    /// Qualité choisie pour une vidéo (« 1080p MP4 »), sinon absent.
+    pub media_label: Option<String>,
+    /// Étape en cours pour une vidéo (« Piste audio », « Fusion audio et vidéo »…).
+    pub stage: Option<String>,
 }
 
 impl DownloadInfo {

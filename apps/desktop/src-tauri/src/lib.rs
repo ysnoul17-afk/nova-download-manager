@@ -1,6 +1,7 @@
 //! Application de bureau Nova Download Manager (Tauri 2).
 
 mod commands;
+mod media_cmds;
 mod tray;
 
 use ndm_engine::{Engine, EngineConfig, EngineEvent};
@@ -113,6 +114,12 @@ pub fn run() {
 
             app.manage(AppState { engine });
             tray::create(app.handle())?;
+
+            // Détection de yt-dlp et FFmpeg en arrière-plan (sans retarder l'ouverture).
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                media_cmds::refresh_tools(&handle).await;
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -150,6 +157,10 @@ pub fn run() {
             commands::set_ui_settings,
             commands::get_category_directories,
             commands::app_info,
+            media_cmds::tools_status,
+            media_cmds::install_tools,
+            media_cmds::analyze_url,
+            media_cmds::add_media,
         ])
         .build(tauri::generate_context!())
         .expect("impossible de démarrer Nova Download Manager");
