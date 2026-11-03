@@ -1,11 +1,13 @@
 import { CheckCircle2, CircleAlert, Clock, Download, History, Layers, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, CATEGORIES, type DownloadInfo, type UiSettings } from "./api";
+import { listen } from "@tauri-apps/api/event";
+import { api, CATEGORIES, EVENT_CLIPBOARD, EVENT_UPDATE, type DownloadInfo, type UiSettings, type UpdateInfo, type UpdateProgress } from "./api";
 import { AddDialog } from "./components/AddDialog";
 import { CategoryIcon, ToastProvider, useToast } from "./components/common";
 import { DownloadsView, matchesFilter, type ListFilter } from "./components/DownloadsView";
 import { HistoryView } from "./components/HistoryView";
 import { SettingsView } from "./components/SettingsView";
+import { UpdateDialog } from "./components/Updates";
 import { CATEGORY_LABEL, errorText, formatSpeed } from "./format";
 import { useDownloads } from "./useDownloads";
 
@@ -28,7 +30,14 @@ function titleFor(f: ListFilter) {
   return MAIN_FILTERS.find((m) => sameFilter(m.filter, f))?.label ?? "Téléchargements";
 }
 
-const DEFAULT_UI: UiSettings = { theme: "system", close_to_tray: true, confirm_open_executables: true };
+const DEFAULT_UI: UiSettings = {
+  theme: "system",
+  close_to_tray: true,
+  confirm_open_executables: true,
+  notifications: true,
+  clipboard_watch: false,
+  auto_update_check: true,
+};
 
 export default function App() {
   return (
@@ -86,6 +95,22 @@ function Shell() {
 
   // Coller une adresse n'importe où (hors champ de saisie) ouvre la fenêtre d'ajout.
   const [pasted, setPasted] = useState("");
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [showUpdate, setShowUpdate] = useState(false);
+
+  // Lien copié dans une autre application (si le réglage est activé) : fenêtre d'ajout pré-remplie.
+  // Mise à jour trouvée au démarrage : bandeau discret dans la barre d'état.
+  useEffect(() => {
+    const uns: (() => void)[] = [];
+    listen<string>(EVENT_CLIPBOARD, ({ payload }) => {
+      setPasted(payload);
+      setAdding(true);
+    }).then((u) => uns.push(u));
+    listen<UpdateProgress>(EVENT_UPDATE, ({ payload }) => {
+      if (payload.phase === "available") setUpdate(payload.info);
+    }).then((u) => uns.push(u));
+    return () => uns.forEach((u) => u());
+  }, []);
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const t = e.target as HTMLElement;
@@ -202,7 +227,16 @@ function Shell() {
           />
         )}
         {view.kind === "history" && <HistoryView refreshKey={historyKey} />}
-        {view.kind === "settings" && <SettingsView ui={ui} onUiChange={setUi} />}
+        {view.kind === "settings" && (
+          <SettingsView
+            ui={ui}
+            onUiChange={setUi}
+            onUpdateAvailable={(info) => {
+              setUpdate(info);
+              setShowUpdate(true);
+            }}
+          />
+        )}
 
         <footer className="statusbar">
           <span className={`pulse ${stats.active ? "on" : ""}`} aria-hidden />
@@ -212,6 +246,11 @@ function Shell() {
           </span>
           <span className="statusbar-speed num">{stats.active ? formatSpeed(stats.total_speed) : ""}</span>
           <span className="grow" />
+          {update && (
+            <button className="link-btn update-link" onClick={() => setShowUpdate(true)}>
+              Version {update.version} disponible
+            </button>
+          )}
           <button className="link-btn" onClick={toggleLimit} title="Basculer la limite de vitesse globale">
             {limit ? `Limite : ${formatSpeed(limit)}` : "Vitesse illimitée"}
           </button>
@@ -224,8 +263,10 @@ function Shell() {
         </footer>
       </main>
 
+      {showUpdate && update && <UpdateDialog info={update} onClose={() => setShowUpdate(false)} />}
       {adding && (
         <AddDialog
+          key={pasted}
           initialText={pasted}
           onClose={() => {
             setAdding(false);

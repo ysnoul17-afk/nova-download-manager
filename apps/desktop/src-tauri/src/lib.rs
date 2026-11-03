@@ -3,6 +3,7 @@
 mod browser;
 mod commands;
 mod media_cmds;
+mod system;
 mod tray;
 
 use ndm_engine::{Engine, EngineConfig, EngineEvent};
@@ -23,11 +24,24 @@ pub struct UiSettings {
     pub close_to_tray: bool,
     /// Demander confirmation avant d'ouvrir un exécutable téléchargé.
     pub confirm_open_executables: bool,
+    /// Notifications Windows à la fin ou en cas d'échec.
+    pub notifications: bool,
+    /// Proposer les liens de fichiers copiés (désactivé tant que l'utilisateur ne l'active pas).
+    pub clipboard_watch: bool,
+    /// Rechercher les mises à jour au démarrage.
+    pub auto_update_check: bool,
 }
 
 impl Default for UiSettings {
     fn default() -> Self {
-        Self { theme: "system".into(), close_to_tray: true, confirm_open_executables: true }
+        Self {
+            theme: "system".into(),
+            close_to_tray: true,
+            confirm_open_executables: true,
+            notifications: true,
+            clipboard_watch: false,
+            auto_update_check: true,
+        }
     }
 }
 
@@ -89,6 +103,13 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let engine = tauri::async_runtime::block_on(async {
@@ -99,11 +120,13 @@ pub fn run() {
             // Relais des événements du moteur vers l'interface.
             let mut rx = engine.subscribe();
             let handle = app.handle().clone();
+            let mut notifier = system::Notifier::new(&engine.list());
             tauri::async_runtime::spawn(async move {
                 use tokio::sync::broadcast::error::RecvError;
                 loop {
                     match rx.recv().await {
                         Ok(ev) => {
+                            notifier.on_event(&handle, &ev);
                             let _ = handle.emit(EVENT_ENGINE, &ev);
                             if let EngineEvent::Stats { total_speed, active, .. } = &ev {
                                 tray::update_tooltip(&handle, *active, *total_speed);
@@ -132,6 +155,9 @@ pub fn run() {
                 Ok(p) => tracing::info!("hôte natif déclaré : {}", p.display()),
                 Err(e) => tracing::warn!("hôte natif non déclaré : {e}"),
             }
+
+            system::start_clipboard_watch(app.handle());
+            system::schedule_update_check(app.handle());
 
             // Détection de yt-dlp et FFmpeg en arrière-plan (sans retarder l'ouverture).
             let handle = app.handle().clone();
@@ -179,6 +205,10 @@ pub fn run() {
             media_cmds::install_tools,
             media_cmds::analyze_url,
             media_cmds::add_media,
+            system::get_autostart,
+            system::set_autostart,
+            system::check_update,
+            system::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("impossible de démarrer Nova Download Manager");

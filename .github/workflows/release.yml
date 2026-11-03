@@ -1,0 +1,73 @@
+# Publication d'une version : compile l'installateur Windows sur les serveurs de GitHub,
+# signe les artefacts de mise à jour et publie la version (installateurs, latest.json, extension).
+#
+# Déclenchement : pousser une étiquette « vX.Y.Z » identique à la version de tauri.conf.json.
+#   git tag v0.4.0 && git push origin v0.4.0
+#
+# Secrets du dépôt requis (Settings > Secrets and variables > Actions) :
+#   TAURI_SIGNING_PRIVATE_KEY           contenu du fichier ndm-updater.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  mot de passe de cette clé
+name: Publication
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Tests (moteur, communication navigateur, application)
+        run: cargo test -p ndm-engine -p ndm-ipc -p ndm-native-host --release
+
+      - name: Dépendances de l'interface
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Extension Chrome / Edge
+        working-directory: apps/browser-extension
+        shell: pwsh
+        run: |
+          npm ci
+          npm run build
+          Compress-Archive -Path dist\* -DestinationPath ..\..\nova-download-manager-extension.zip -Force
+
+      - name: Compilation, signature et publication
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: Nova Download Manager ${{ github.ref_name }}
+          releaseBody: |
+            Installation : téléchargez « Nova.Download.Manager_*_x64-setup.exe ».
+            Extension Chrome / Edge : « nova-download-manager-extension.zip » (à décompresser, puis « Charger l'extension non empaquetée »).
+            Les utilisateurs existants reçoivent cette version par la mise à jour intégrée.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config src-tauri/tauri.release.conf.json
+
+      - name: Joindre l'extension à la version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" nova-download-manager-extension.zip --clobber

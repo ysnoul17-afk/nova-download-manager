@@ -6,3 +6,5 @@ apps/desktop/src-tauri/gen/
 apps/browser-extension/dist/
 apps/browser-extension/node_modules/
 apps/desktop/src-tauri/binaries/
+*.key
+*.key.pub

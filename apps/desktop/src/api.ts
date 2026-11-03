@@ -67,7 +67,22 @@ export interface UiSettings {
   theme: "system" | "light" | "dark";
   close_to_tray: boolean;
   confirm_open_executables: boolean;
+  notifications: boolean;
+  clipboard_watch: boolean;
+  auto_update_check: boolean;
 }
+
+export interface UpdateInfo {
+  version: string;
+  current_version: string;
+  notes: string | null;
+  date: string | null;
+}
+
+export type UpdateProgress =
+  | { phase: "available"; info: UpdateInfo }
+  | { phase: "download"; downloaded: number; total: number | null }
+  | { phase: "installing" };
 
 export type SortKey = "added_at" | "completed_at" | "size" | "speed" | "type" | "name";
 
@@ -194,9 +209,15 @@ export const api = {
     invoke<DownloadInfo>("add_media", { options }),
   toolsStatus: () => invoke<ToolsStatus>("tools_status"),
   installTools: (which: Tool[]) => invoke<ToolsStatus>("install_tools", { which }),
+  getAutostart: () => invoke<boolean>("get_autostart"),
+  setAutostart: (enabled: boolean) => invoke<boolean>("set_autostart", { enabled }),
+  checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
+  installUpdate: () => invoke<void>("install_update"),
   appInfo: () => invoke<{ version: string; data_dir: string }>("app_info"),
 };
 
 export const EVENT_ENGINE = "ndm://engine";
 export const EVENT_RESYNC = "ndm://resync";
 export const EVENT_TOOLS = "ndm://tools";
+export const EVENT_CLIPBOARD = "ndm://clipboard";
+export const EVENT_UPDATE = "ndm://update";

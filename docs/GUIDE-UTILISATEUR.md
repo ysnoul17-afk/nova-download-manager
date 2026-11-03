@@ -80,6 +80,24 @@ Fermer la fenêtre réduit NDM dans la zone de notification ; les téléchargeme
 utilisez **Quitter** dans le menu de l'icône. Les téléchargements interrompus (fermeture, coupure réseau,
 redémarrage de Windows) reprennent automatiquement au lancement suivant.
 
+## Notifications, presse-papiers et démarrage
+
+Réglages dans **Paramètres > Apparence et comportement** :
+
+- **Notifications** : une notification Windows signale la fin ou l'échec d'un téléchargement quand la
+  fenêtre de NDM n'est pas au premier plan.
+- **Proposer les liens copiés** (désactivé par défaut) : quand vous copiez l'adresse d'un fichier (zip,
+  exe, mp4, pdf…) ou d'une page vidéo connue, la fenêtre d'ajout s'ouvre avec cette adresse. Les adresses
+  déjà présentes dans NDM ne sont pas reproposées.
+- **Lancer NDM au démarrage de Windows** : NDM démarre réduit dans la zone de notification.
+
+## Mises à jour
+
+NDM recherche les nouvelles versions au démarrage (réglable dans **Paramètres > Mises à jour**). Quand une
+version est disponible, un lien apparaît dans la barre d'état : il affiche les nouveautés et propose
+**Installer et redémarrer**. La signature de la mise à jour est vérifiée avant installation ; les
+téléchargements en cours reprennent après le redémarrage.
+
 ## Historique
 
 Tous les téléchargements sont conservés dans l'historique, avec recherche, filtres par statut, type et

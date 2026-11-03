@@ -5,17 +5,29 @@ import { api, CATEGORIES, type Category, type EngineConfig, type UiSettings } fr
 import { CATEGORY_LABEL, errorText } from "../format";
 import { CategoryIcon, useToast } from "./common";
 import { ToolsPanel } from "./ToolsPanel";
+import { UpdatesPanel } from "./Updates";
+import type { UpdateInfo } from "../api";
 
-export function SettingsView({ ui, onUiChange }: { ui: UiSettings; onUiChange: (s: UiSettings) => void }) {
+export function SettingsView({
+  ui,
+  onUiChange,
+  onUpdateAvailable,
+}: {
+  ui: UiSettings;
+  onUiChange: (s: UiSettings) => void;
+  onUpdateAvailable: (info: UpdateInfo) => void;
+}) {
   const toast = useToast();
   const [cfg, setCfg] = useState<EngineConfig | null>(null);
   const [dirs, setDirs] = useState<Record<Category, string> | null>(null);
   const [info, setInfo] = useState<{ version: string; data_dir: string } | null>(null);
+  const [autostart, setAutostartState] = useState<boolean | null>(null);
 
   useEffect(() => {
     api.getConfig().then(setCfg).catch((e) => toast(errorText(e), "error"));
     api.categoryDirs().then(setDirs).catch(() => {});
     api.appInfo().then(setInfo).catch(() => {});
+    api.getAutostart().then(setAutostartState).catch(() => setAutostartState(null));
   }, [toast]);
 
   /** Enregistre immédiatement chaque modification (pas de bouton « Enregistrer » à oublier). */
@@ -91,6 +103,32 @@ export function SettingsView({ ui, onUiChange }: { ui: UiSettings; onUiChange: (
             checked={ui.confirm_open_executables}
             onChange={(v) => saveUi({ ...ui, confirm_open_executables: v })}
           />
+          <Toggle
+            label="Notifications de fin et d'échec"
+            hint="Affichées quand la fenêtre de NDM n'est pas au premier plan."
+            checked={ui.notifications}
+            onChange={(v) => saveUi({ ...ui, notifications: v })}
+          />
+          <Toggle
+            label="Proposer les liens copiés"
+            hint="Quand vous copiez l'adresse d'un fichier (zip, exe, mp4…) ou d'une vidéo, NDM propose de la télécharger. Le presse-papiers n'est lu que lorsque ce réglage est activé, et rien ne quitte votre ordinateur."
+            checked={ui.clipboard_watch}
+            onChange={(v) => saveUi({ ...ui, clipboard_watch: v })}
+          />
+          {autostart !== null && (
+            <Toggle
+              label="Lancer NDM au démarrage de Windows"
+              hint="Démarre réduit dans la zone de notification, prêt à recevoir les téléchargements du navigateur."
+              checked={autostart}
+              onChange={async (v) => {
+                try {
+                  setAutostartState(await api.setAutostart(v));
+                } catch (e) {
+                  toast(errorText(e), "error");
+                }
+              }}
+            />
+          )}
         </section>
 
         <section className="panel">
@@ -200,6 +238,18 @@ export function SettingsView({ ui, onUiChange }: { ui: UiSettings; onUiChange: (
               );
             })}
         </section>
+
+        {info && (
+          <section className="panel">
+            <h2>Mises à jour</h2>
+            <UpdatesPanel
+              version={info.version}
+              autoCheck={ui.auto_update_check}
+              onAutoCheck={(v) => saveUi({ ...ui, auto_update_check: v })}
+              onAvailable={onUpdateAvailable}
+            />
+          </section>
+        )}
 
         <section className="panel">
           <h2>Outils vidéo</h2>

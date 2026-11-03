@@ -12,11 +12,12 @@ Application Tauri 2 (Rust + React/TypeScript) avec un moteur de téléchargement
 | 5. Vidéos avancées | yt-dlp, FFmpeg, HLS/DASH, choix de la qualité | Fait (réalisée avant la phase 3) |
 | 3. Extension navigateur | Détection des vidéos, bouton flottant par lecteur, interception | Fait |
 | 4. Intégration navigateur | Native Messaging, canal local sécurisé, relancement automatique | Fait |
-| 6. Finalisation | Notifications, planificateur, i18n, installateur signé, mises à jour | À faire |
+| 6. Finalisation | Notifications, presse-papiers, démarrage avec Windows, mises à jour signées | Fait |
+| 6 (suite) | Planificateur, internationalisation, signature Authenticode de l'installateur | À faire |
 
 ## Ce qui a été testé
 
-**Tests automatisés** (50 tests Rust : moteur, vidéo, communication, application) contre des serveurs HTTP locaux :
+**Tests automatisés** (52 tests Rust : moteur, vidéo, communication, application) contre des serveurs HTTP locaux :
 
 - téléchargement multisegment ;
 - serveur sans reprise, taille inconnue, fichier vide ;
@@ -50,7 +51,11 @@ l'extension, application arrêtée puis relancée automatiquement.
 - coupure puis retour du serveur ;
 - intégrité vérifiée par SHA-256 identique à la source ;
 - historique, paramètres, thème sombre ;
-- vidéo : installation guidée de yt-dlp, choix de la qualité, étapes affichées en direct.
+- vidéo : installation guidée de yt-dlp, choix de la qualité, étapes affichées en direct ;
+- mises à jour : détection au démarrage (bandeau), notes de version, téléchargement avec signature valide
+  accepté, signature d'une autre clé refusée ;
+- presse-papiers : lien d'article ignoré, lien de fichier dans une phrase extrait et proposé ;
+- démarrage automatique : entrée créée avec `--minimized`.
 
 **Non testé à ce stade** :
 
@@ -61,10 +66,13 @@ l'extension, application arrêtée puis relancée automatiquement.
 - YouTube réel : testé une fois par l'utilisateur sous Windows (1080p, image et son assemblés) ; les autres
   sites réels ne sont pas testés ;
 - extension sous Windows (Chrome, Edge) : testée sous Linux avec Chrome for Testing uniquement ;
-- installation automatique de FFmpeg (Windows uniquement : archive officielle vérifiée ici, extraction testée).
+- installation automatique de FFmpeg (Windows uniquement : archive officielle vérifiée ici, extraction testée) ;
+- notifications Windows (pas de service de notification dans l'environnement de test) ;
+- installation effective d'une mise à jour et workflow GitHub Actions (à valider lors de la première publication).
 
 ## Démarrage
 
 - Compiler sous Windows : [docs/BUILD-WINDOWS.md](docs/BUILD-WINDOWS.md)
 - Utilisation : [docs/GUIDE-UTILISATEUR.md](docs/GUIDE-UTILISATEUR.md)
 - Architecture et choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Publier une version et activer les mises à jour : [docs/PUBLICATION.md](docs/PUBLICATION.md)

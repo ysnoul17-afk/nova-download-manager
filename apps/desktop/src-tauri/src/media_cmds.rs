@@ -66,7 +66,7 @@ pub async fn install_tools(app: AppHandle, state: State<'_, AppState>, which: Ve
 }
 
 /// Sites dont les adresses sont des pages vidéo, jamais des fichiers directs.
-fn is_video_host(url: &str) -> bool {
+pub fn is_video_host(url: &str) -> bool {
     let Ok(u) = url::Url::parse(url) else { return false };
     let host = u.host_str().unwrap_or("").trim_start_matches("www.").trim_start_matches("m.");
     const HOSTS: [&str; 18] = [

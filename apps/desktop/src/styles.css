@@ -449,3 +449,11 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--n
 .tool-progress { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
 .tool-progress .progress { flex: 1; }
 .ok-icon { color: var(--ok); }
+
+/* --- Mises à jour ------------------------------------------------------ */
+.update-link { color: var(--nova-ink); font-weight: 600; }
+.release-notes {
+  margin: 0; max-height: 200px; overflow: auto; padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--line); font: 12.5px/1.5 var(--font); white-space: pre-wrap; user-select: text;
+}
+.setting-hint.is-error { color: var(--danger); }

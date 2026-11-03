@@ -177,3 +177,23 @@ figure dans la liste ; si NDM accepte, le téléchargement du navigateur est ann
 **Permissions.** `nativeMessaging`, `downloads`, `contextMenus`, `storage`, `webRequest` et l'accès aux pages
 `http(s)` (bouton vidéo, repérage des flux). `cookies` est **facultative** : demandée seulement si l'utilisateur
 active « Transmettre les cookies du site ». Les cookies ne sont alors envoyés qu'à NDM, sur la machine.
+
+## Intégration système (`apps/desktop/src-tauri/src/system.rs`)
+
+**Notifications.** Les changements d'état du moteur sont suivis ; seule une transition observée pendant la
+session (en cours → terminé ou échec) produit une notification, et seulement si la fenêtre n'a pas le focus.
+
+**Presse-papiers.** Lu toutes les 900 ms uniquement si l'utilisateur a activé le réglage ; le contenu présent
+au démarrage n'est jamais proposé. Un texte court contenant une adresse de fichier reconnu (extension) ou de
+site vidéo connu ouvre la fenêtre d'ajout ; les adresses déjà dans NDM sont ignorées (dont « Copier
+l'adresse » de NDM lui-même).
+
+**Démarrage avec Windows.** `tauri-plugin-autostart` (clé `Run` de l'utilisateur), lancement avec
+`--minimized`.
+
+**Mises à jour.** `tauri-plugin-updater` : manifeste `latest.json` publié dans les Releases GitHub, archives
+signées par minisign (clé privée dans les secrets GitHub, clé publique dans `tauri.conf.json`), installation
+NSIS en mode passif puis redémarrage. L'état des téléchargements est enregistré avant l'installation sans
+arrêter le moteur : si l'installation échoue, NDM continue normalement. Les artefacts de mise à jour ne sont
+produits que par le workflow de publication (`tauri.release.conf.json`), pour que la compilation locale n'ait
+pas besoin de la clé privée.
