@@ -9,7 +9,7 @@ Application Tauri 2 (Rust + React/TypeScript) avec un moteur de téléchargement
 |---|---|---|
 | 1. Fondations | Monorepo, application Tauri, interface React, SQLite, réglages, moteur, progression | Fait |
 | 2. Moteur avancé | Multisegment, pause/reprise, simultanés, erreurs, historique, limite de vitesse | Fait |
-| 5. Vidéos avancées | yt-dlp, FFmpeg, HLS/DASH, choix de la qualité | Fait (avancée avant la 3, à ta demande) |
+| 5. Vidéos avancées | yt-dlp, FFmpeg, HLS/DASH, choix de la qualité | Fait (réalisée avant la phase 3) |
 | 3. Extension navigateur | Détection des vidéos, bouton flottant par lecteur | À faire |
 | 4. Intégration navigateur | Native Messaging, synchronisation des états | À faire |
 | 6. Finalisation | Notifications, planificateur, i18n, installateur signé, mises à jour | À faire |
@@ -46,9 +46,8 @@ Application Tauri 2 (Rust + React/TypeScript) avec un moteur de téléchargement
 
 **Non testé à ce stade** :
 
-- compilation et exécution sous Windows ;
-- zone de notification Windows ;
-- installateurs NSIS/MSI ;
+- utilisation sous Windows : la compilation, les tests du moteur et la production des installateurs NSIS/MSI
+  ont réussi sous Windows 11, mais l'application installée reste à valider (zone de notification comprise) ;
 - fichiers de plusieurs gigaoctets ;
 - erreurs DNS et disque plein réels (messages couverts par des tests unitaires seulement) ;
 - YouTube et les autres sites réels (inaccessibles depuis l'environnement de développement) ;
