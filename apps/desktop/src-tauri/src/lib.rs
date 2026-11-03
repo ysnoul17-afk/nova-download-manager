@@ -1,5 +1,6 @@
 //! Application de bureau Nova Download Manager (Tauri 2).
 
+mod browser;
 mod commands;
 mod media_cmds;
 mod tray;
@@ -80,7 +81,12 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         // Une seule instance : relancer l'application ramène la fenêtre existante.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Lancement par l'extension (« --minimized ») : on ne fait pas surgir la fenêtre.
+            if !args.iter().any(|a| a == "--minimized") {
+                show_main_window(app);
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -114,6 +120,18 @@ pub fn run() {
 
             app.manage(AppState { engine });
             tray::create(app.handle())?;
+
+            // Fenêtre masquée au démarrage si lancé par l'extension (« --minimized »).
+            if !std::env::args().any(|a| a == "--minimized") {
+                show_main_window(app.handle());
+            }
+
+            // Extension du navigateur : serveur local et déclaration de l'hôte natif.
+            browser::start_server(app.handle(), data_dir.clone());
+            match browser::register_native_host(&data_dir) {
+                Ok(p) => tracing::info!("hôte natif déclaré : {}", p.display()),
+                Err(e) => tracing::warn!("hôte natif non déclaré : {e}"),
+            }
 
             // Détection de yt-dlp et FFmpeg en arrière-plan (sans retarder l'ouverture).
             let handle = app.handle().clone();

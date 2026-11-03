@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Nova Download Manager",
+  "short_name": "NDM",
+  "version": "0.3.0",
+  "description": "Envoie vos téléchargements et les vidéos des pages web vers Nova Download Manager.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAomkWSuGeC+WlVyM2l6bCC+1Mo3ruknUTvVRwDkEYI9IHvytKHIWsalUHTscDkw9utZzFPNcKuZfRBHA97ICE7dSfp7jsi06569QaUDe0iXJY5JoFYkpUXafP9H6ml1nS73FxStpg7gAGyNd1gPUVgSAVt9Ech1j9kMlwho3WNI6dhEBcrmecjUicgMoJ0ADzGQdXr4ZwaE31N0DXOk7HftE0ajXSvshOZqWzE8mUO1aR+zXECixy+bDVwQ92ptbB39Znh9NRuo7KWf/ViRRV2ZoYs7a/OeMyoykDsRT4M5mc3nc+y48WCB1CJ4jmvtATGPQ+IURi5IlqKsRH8IN6LQIDAQAB",
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "action": { "default_popup": "popup.html", "default_title": "Nova Download Manager", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["nativeMessaging", "downloads", "contextMenus", "storage", "webRequest"],
+  "optional_permissions": ["cookies"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "minimum_chrome_version": "116"
+}

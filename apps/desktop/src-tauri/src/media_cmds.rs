@@ -102,6 +102,11 @@ pub enum UrlAnalysis {
 
 #[tauri::command]
 pub async fn analyze_url(app: AppHandle, state: State<'_, AppState>, url: String) -> Result<UrlAnalysis, String> {
+    analyze(&app, &state.engine, &url).await
+}
+
+/// Analyse commune à l'interface et à l'extension du navigateur.
+pub async fn analyze(app: &AppHandle, engine: &ndm_engine::Engine, url: &str) -> Result<UrlAnalysis, String> {
     let url = url.trim().to_string();
     let parsed = url::Url::parse(&url).map_err(|_| format!("Adresse invalide : {url}"))?;
     if !matches!(parsed.scheme(), "http" | "https") {
@@ -110,7 +115,7 @@ pub async fn analyze_url(app: AppHandle, state: State<'_, AppState>, url: String
 
     let mut probe_error = None;
     if !is_video_host(&url) {
-        match state.engine.inspect(&url).await {
+        match engine.inspect(&url).await {
             Ok(p) => {
                 let mime = p.mime.clone().unwrap_or_default().to_ascii_lowercase();
                 let is_page = mime.starts_with("text/html") || mime.starts_with("application/xhtml");
@@ -122,7 +127,7 @@ pub async fn analyze_url(app: AppHandle, state: State<'_, AppState>, url: String
         }
     }
 
-    let status = refresh_tools(&app).await;
+    let status = refresh_tools(app).await;
     let mut missing = Vec::new();
     if status.ytdlp.is_none() {
         missing.push(Tool::YtDlp);
@@ -140,7 +145,7 @@ pub async fn analyze_url(app: AppHandle, state: State<'_, AppState>, url: String
         return Ok(UrlAnalysis::NeedsTools { missing });
     }
 
-    match state.engine.analyze_media(&url).await {
+    match engine.analyze_media(&url).await {
         Ok(info) => Ok(UrlAnalysis::Media { info }),
         Err(e) => {
             let message = e.to_string();

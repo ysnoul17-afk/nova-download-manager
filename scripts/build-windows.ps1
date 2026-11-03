@@ -112,7 +112,13 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "La compilation ou les tests du moteur ont échoué. Si le message mentionne « os error 4551 », désactivez le Contrôle intelligent des applications (voir docs\BUILD-WINDOWS.md)."
         }
-        Ok "Tests réussis"
+        Ok "Tests du moteur réussis"
+
+        # Communication avec le navigateur : un échec ici n'empêche pas de produire l'installateur.
+        cargo test -p ndm-ipc -p ndm-native-host --release
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "    ATTENTION  tests de communication navigateur en échec : envoyez ce journal pour analyse." -ForegroundColor Yellow
+        } else { Ok "Tests de communication navigateur réussis" }
     }
 
     Step "Dépendances JavaScript"
@@ -125,12 +131,22 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "La compilation Tauri a échoué." }
     Pop-Location
 
+    Step "Extension Chrome / Edge"
+    Push-Location (Join-Path $Root "apps\browser-extension")
+    npm ci
+    if ($LASTEXITCODE -ne 0) { throw "npm ci (extension) a échoué." }
+    npm run build
+    if ($LASTEXITCODE -ne 0) { throw "La compilation de l'extension a échoué." }
+    Pop-Location
+    Ok "Extension prête : $(Join-Path $Root 'apps\browser-extension\dist')"
+
     Step "Terminé"
     $bundle = Join-Path $Root "target\release\bundle"
     Get-ChildItem -Recurse -Path $bundle -Include *.exe, *.msi | ForEach-Object {
         Write-Host ("    {0}  ({1:N1} Mo)" -f $_.FullName, ($_.Length / 1MB)) -ForegroundColor Green
     }
     Write-Host "`nApplication seule : $(Join-Path $Root 'target\release\nova-download-manager.exe')"
+    Write-Host "Extension à charger dans Chrome/Edge (mode développeur) : $(Join-Path $Root 'apps\browser-extension\dist')"
 }
 finally {
     Pop-Location

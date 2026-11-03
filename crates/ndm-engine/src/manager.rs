@@ -179,6 +179,11 @@ impl Engine {
         download::probe(&self.inner.ctx, url, &Default::default()).await
     }
 
+    /// Comme `inspect`, avec les en-têtes du navigateur (Referer, User-Agent, Cookie…).
+    pub async fn inspect_with(&self, url: &str, headers: &BTreeMap<String, String>) -> Result<download::ProbeResult> {
+        download::probe(&self.inner.ctx, url, headers).await
+    }
+
     /// Analyse une page vidéo avec yt-dlp (qualités disponibles, titre, durée…).
     pub async fn analyze_media(&self, url: &str) -> Result<crate::media::MediaInfo> {
         let tools = self.media_tools();

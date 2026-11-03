@@ -42,10 +42,10 @@ nova-download-manager/
 |---|---|---|
 | **`crates/ndm-engine`** | Moteur HTTP/HTTPS, file d'attente, reprise, limitation de vitesse, SQLite | Fait, testé |
 | **`apps/desktop`** | Application Tauri : interface, commandes, zone de notification | Fait, testé sous Linux |
-| `apps/browser-extension` | Extension MV3 Chrome/Edge | Phase 3 |
-| `crates/ndm-native-host` | Hôte Native Messaging | Phase 4 |
+| **`apps/browser-extension`** | Extension MV3 Chrome/Edge (TypeScript, esbuild) | Fait, testé dans Chrome |
+| **`crates/ndm-ipc`** | Protocole extension ↔ application, canal local, jeton | Fait, testé |
+| **`crates/ndm-native-host`** | Hôte Native Messaging (`ndm-native-host.exe`) | Fait, testé |
 | **`ndm-engine::media` et `::tools`** | yt-dlp, FFmpeg, HLS/DASH, installation vérifiée | Fait, testé |
-| `packages/shared-types` | Types partagés extension ↔ application | Phase 3 |
 
 **Écart avec la structure suggérée, et pourquoi.** Le cahier des charges proposait `packages/download-core`
 et `services/aria2`. Le code Rust est rangé dans `crates/` (convention Cargo) et le code JavaScript dans
@@ -141,9 +141,39 @@ Une seule instance peut tourner : la relancer ramène la fenêtre existante.
 Permissions de la fenêtre (`capabilities/default.json`) : uniquement les dialogues de choix de dossier et
 de confirmation. Politique de sécurité du contenu stricte : aucun script ni ressource externe.
 
-## Communication extension ↔ application (phases 3 et 4)
+## Extension et communication avec l'application
 
-L'extension parle à `ndm-native-host.exe` par Native Messaging (le navigateur vérifie l'ID de l'extension
-via `allowed_origins`). L'hôte relaie vers l'application par un canal nommé Windows restreint à
-l'utilisateur courant. Aucun port réseau n'est ouvert. Les cookies d'un site ne sont transmis à NDM que si
-l'utilisateur l'autorise explicitement pour ce téléchargement.
+**Chaîne.** L'extension appelle `chrome.runtime.sendNativeMessage("app.novadm.host", …)`. Le navigateur lance
+`ndm-native-host.exe` (installé à côté de l'application) seulement si l'identifiant de l'extension figure dans
+`allowed_origins` ; cet identifiant est fixe (`eogmknmllnjfblmecmcngbbpgikhigjc`) grâce à la clé publique du
+manifeste. L'hôte valide le message (type autorisé, adresses `http(s)` seulement, pas de retour à la ligne
+dans les champs, taille bornée) puis le relaie à l'application par un **canal nommé Windows** (clients distants
+refusés, première instance exigée pour empêcher l'usurpation) accompagné d'un **jeton de 256 bits** lu dans le
+dossier de données de l'utilisateur. Aucun port réseau n'est ouvert. Si l'application ne répond pas, l'hôte la
+lance avec `--minimized` (fenêtre masquée) puis réessaie pendant 20 secondes.
+
+**Déclaration.** À chaque démarrage, l'application écrit le manifeste de l'hôte et l'enregistre pour Chrome,
+Edge, Chromium et Brave (`HKCU\Software\…\NativeMessagingHosts`), ce qui suit les mises à jour et les
+déplacements de l'installation.
+
+**Requêtes.** `ping`, `download` (lien intercepté ou envoyé : l'application **vérifie d'abord** que le lien
+renvoie bien un fichier, sinon le navigateur garde son téléchargement), `analyze` (fichier, vidéo, page),
+`download_media` (qualité choisie), `status` (fenêtre de l'extension, sans lancer l'application), `show`.
+
+**Bouton vidéo (script de contenu).** Les `<video>` sont repérées au chargement et par un `MutationObserver`
+(pages dynamiques, vidéos retirées). Le pointeur est suivi par position, car les lecteurs posent des calques au
+dessus de la balise vidéo ; en cas d'imbrication, la plus petite vidéo l'emporte. Un seul bouton par vidéo, dans
+un shadow DOM ouvert attaché à la racine du document (aucun conflit de styles, aucune interférence avec les
+contrôles du lecteur) ; seuls les clics réels (`event.isTrusted`) sont acceptés, donc la page ne peut pas
+déclencher de téléchargement à la place de l'utilisateur. Cible analysée : la source HTTP de la vidéo si elle
+existe, sinon le lien qui l'entoure, sinon la page ; pour une vidéo `blob:` hors des sites connus, les flux
+HLS/DASH repérés dans le trafic de l'onglet (`webRequest`, observation seule) sont proposés en premier. Une
+vidéo avec des clés de chiffrement (`video.mediaKeys`) est signalée comme protégée, sans tentative.
+
+**Interception.** En mode automatique, `downloads.onDeterminingFilename` retient les fichiers dont l'extension
+figure dans la liste ; si NDM accepte, le téléchargement du navigateur est annulé, sinon il continue normalement
+(application absente, lien non récupérable).
+
+**Permissions.** `nativeMessaging`, `downloads`, `contextMenus`, `storage`, `webRequest` et l'accès aux pages
+`http(s)` (bouton vidéo, repérage des flux). `cookies` est **facultative** : demandée seulement si l'utilisateur
+active « Transmettre les cookies du site ». Les cookies ne sont alors envoyés qu'à NDM, sur la machine.

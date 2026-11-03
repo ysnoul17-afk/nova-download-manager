@@ -199,6 +199,10 @@ async fn downloads_selected_quality_and_merges_audio() {
     assert_eq!(audio, 1, "la piste audio séparée a été fusionnée");
     assert_eq!(done.total_size, Some(std::fs::metadata(done.full_path()).unwrap().len()));
     assert_eq!(done.media_label.as_deref(), Some("480p MP4"));
+    // L'estimation affichée avant le téléchargement est proche de la taille réelle.
+    let est = info.options.iter().find(|o| o.id == "v480").unwrap().est_size.unwrap() as f64;
+    let real = done.total_size.unwrap() as f64;
+    assert!((est - real).abs() / real < 0.25, "estimation {est} pour {real} octets réels");
 
     // Aucun fichier temporaire ne doit rester.
     let leftovers: Vec<_> = std::fs::read_dir(&done.directory)

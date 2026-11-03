@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Nova Download Manager</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <img src="icons/icon-32.png" alt="" width="22" height="22" />
+    <span class="name">Nova Download Manager</span>
+    <span id="state" class="state">…</span>
+  </header>
+
+  <section id="downloads" aria-live="polite"></section>
+  <div class="row"><button id="open" class="btn">Ouvrir Nova Download Manager</button></div>
+
+  <section class="card">
+    <div class="row between">
+      <h2>Fichiers de cette page</h2>
+      <button id="scan" class="link">Rechercher</button>
+    </div>
+    <div id="links"></div>
+  </section>
+
+  <section class="card">
+    <h2>Téléchargements du navigateur</h2>
+    <label class="radio"><input type="radio" name="mode" value="auto" /> <span><b>Automatique</b> : NDM prend en charge les fichiers reconnus. S'il n'est pas disponible, le navigateur télécharge normalement.</span></label>
+    <label class="radio"><input type="radio" name="mode" value="manual" /> <span><b>Manuel</b> : le navigateur garde ses téléchargements ; clic droit sur un lien pour utiliser NDM.</span></label>
+    <label class="toggle"><input type="checkbox" id="videoButton" /> Bouton « Télécharger cette vidéo » sur les lecteurs</label>
+    <label class="toggle"><input type="checkbox" id="sendCookies" /> Transmettre les cookies du site à NDM</label>
+    <p class="hint">Les cookies permettent de télécharger des fichiers réservés à votre compte. Ils ne sont envoyés qu'à NDM, sur votre ordinateur.</p>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>

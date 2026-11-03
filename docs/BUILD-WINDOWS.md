@@ -38,12 +38,25 @@ n'est pas signé numériquement, il est lui aussi bloqué lorsque cette protecti
 
 ```
 target\release\nova-download-manager.exe                                 application seule
-target\release\bundle\nsis\Nova Download Manager_0.2.0_x64-setup.exe     installateur (recommandé)
-target\release\bundle\msi\Nova Download Manager_0.2.0_x64_fr-FR.msi       installateur MSI
+target\release\bundle\nsis\Nova Download Manager_0.3.0_x64-setup.exe     installateur (recommandé)
+target\release\bundle\msi\Nova Download Manager_0.3.0_x64_fr-FR.msi       installateur MSI
 ```
 
 L'installateur NSIS s'installe pour l'utilisateur courant, sans droits administrateur. La désinstallation
 se fait depuis « Paramètres > Applications ».
+
+## Installer l'extension Chrome ou Edge
+
+Le script construit l'extension dans `apps\browser-extension\dist`. Pour la charger :
+
+- **Chrome** : `chrome://extensions`, activer **Mode développeur**, **Charger l'extension non empaquetée**,
+  choisir le dossier `dist`.
+- **Edge** : `edge://extensions`, activer **Mode développeur**, **Charger l'extension décompressée**,
+  choisir le dossier `dist`.
+
+Lancez NDM au moins une fois après l'installation : il se déclare alors auprès des navigateurs. Copiez de
+préférence `dist` dans un dossier permanent (hors OneDrive), car le navigateur charge l'extension depuis cet
+emplacement.
 
 ## Mettre à jour une installation existante
 

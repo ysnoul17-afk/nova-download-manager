@@ -3,3 +3,6 @@ node_modules/
 apps/desktop/dist/
 apps/desktop/src-tauri/gen/
 *.ndmpart
+apps/browser-extension/dist/
+apps/browser-extension/node_modules/
+apps/desktop/src-tauri/binaries/

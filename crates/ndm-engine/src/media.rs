@@ -68,6 +68,12 @@ async fn kill_tree(child: &mut tokio::process::Child) {
 // Analyse
 // ---------------------------------------------------------------------------
 
+/// Ordre de préférence des formats, identique à l'analyse et au téléchargement :
+/// résolution d'abord, puis conteneur MP4/M4A ; yt-dlp départage ensuite (codec, débit…).
+/// Avec ce même tri, la liste renvoyée par `yt-dlp -J` va du moins bon au meilleur format,
+/// ce qui permet d'estimer la taille du flux réellement choisi.
+const FORMAT_SORT: &str = "res,ext:mp4:m4a";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MediaFormat {
@@ -94,12 +100,12 @@ impl MediaFormat {
     pub fn ytdlp_args(self, subtitles: bool) -> Vec<String> {
         let mut a: Vec<String> = match self {
             // Résolution d'abord, puis préférence pour MP4/M4A (compatibilité maximale).
-            Self::Best => vec!["-f".into(), "bv*+ba/b".into(), "-S".into(), "res,ext:mp4:m4a".into()],
+            Self::Best => vec!["-f".into(), "bv*+ba/b".into(), "-S".into(), FORMAT_SORT.into()],
             Self::Video { max_height: h } => vec![
                 "-f".into(),
                 format!("bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/b"),
                 "-S".into(),
-                "res,ext:mp4:m4a".into(),
+                FORMAT_SORT.into(),
             ],
             Self::AudioMp3 => vec![
                 "-f".into(),
@@ -211,12 +217,16 @@ pub fn build_info(url: &str, j: &Value) -> Result<MediaInfo> {
     let is_audio_only = |f: &Value| vcodec(f).as_deref() == Some("none");
     let has_audio = |f: &Value| matches!(acodec(f).as_deref(), Some(a) if a != "none") || is_audio_only(f);
 
-    // Meilleure piste audio seule (pour estimer la taille des combinaisons).
-    let best_audio_size = formats
+    // `formats` est trié du moins bon au meilleur (voir FORMAT_SORT) : le dernier
+    // format qui satisfait un filtre est celui que yt-dlp sélectionnera.
+    let best_audio = formats.iter().rev().find(|f| is_audio_only(f)).copied();
+    let best_audio_size = best_audio.and_then(|f| format_size(f, duration));
+    let m4a_audio_size = formats
         .iter()
-        .filter(|f| is_audio_only(f))
-        .filter_map(|f| format_size(f, duration))
-        .max();
+        .rev()
+        .find(|f| is_audio_only(f) && str_of(f, "ext") == Some("m4a"))
+        .or(best_audio.as_ref())
+        .and_then(|f| format_size(f, duration));
     let any_audio = formats.iter().any(|f| has_audio(f)) || vcodec(formats[0]).is_none();
 
     // Hauteurs disponibles, de la plus grande à la plus petite.
@@ -232,14 +242,11 @@ pub fn build_info(url: &str, j: &Value) -> Result<MediaInfo> {
 
     let mut options = Vec::new();
     for h in &heights {
-        // Taille du meilleur flux vidéo à cette hauteur (+ audio s'il est séparé).
-        let best_video = formats
-            .iter()
-            .filter(|f| !is_audio_only(f) && f.get("height").and_then(Value::as_u64) == Some(*h as u64))
-            .max_by(|a, b| {
-                f64_of(a, "tbr").unwrap_or(0.0).partial_cmp(&f64_of(b, "tbr").unwrap_or(0.0)).unwrap()
-            });
-        let est = best_video.and_then(|v| {
+        // Même règle que « bv*[height<=h] » : meilleur flux vidéo dont la hauteur ne dépasse pas h.
+        let chosen = formats.iter().rev().find(|f| {
+            !is_audio_only(f) && f.get("height").and_then(Value::as_u64).is_some_and(|fh| fh <= *h as u64)
+        });
+        let est = chosen.and_then(|v| {
             let vs = format_size(v, duration)?;
             let separate_audio = !matches!(acodec(v).as_deref(), Some(a) if a != "none");
             Some(vs + if separate_audio { best_audio_size.unwrap_or(0) } else { 0 })
@@ -282,7 +289,7 @@ pub fn build_info(url: &str, j: &Value) -> Result<MediaInfo> {
             label: "Audio uniquement".into(),
             container: "M4A".into(),
             format: MediaFormat::AudioM4a,
-            est_size: best_audio_size,
+            est_size: m4a_audio_size,
         });
     }
     if options.is_empty() {
@@ -373,7 +380,7 @@ pub fn friendly_error(stderr: &str) -> String {
 pub async fn analyze(tools: &MediaTools, url: &str, cancel: &CancellationToken) -> Result<MediaInfo> {
     let ytdlp = tools.ytdlp.as_ref().ok_or_else(|| EngineError::Other("yt-dlp n'est pas installé.".into()))?;
     let mut c = command(ytdlp);
-    c.args(["--ignore-config", "-J", "--no-playlist", "--no-warnings", "--encoding", "utf-8"]);
+    c.args(["--ignore-config", "-J", "--no-playlist", "--no-warnings", "--encoding", "utf-8", "-S", FORMAT_SORT]);
     if let Some(d) = &tools.ffmpeg_dir {
         c.arg("--ffmpeg-location").arg(d);
     }
@@ -663,14 +670,16 @@ mod tests {
             "uploader": "Chaîne Test",
             "thumbnail": "https://i.ytimg.com/vi/x/maxresdefault.jpg",
             "subtitles": {"fr": [], "en": [], "live_chat": []},
+            // Ordre renvoyé par `yt-dlp -J -S res,ext:mp4:m4a` : du moins bon au meilleur.
             "formats": [
                 {"format_id": "sb0", "format_note": "storyboard", "ext": "mhtml", "vcodec": "none", "acodec": "none"},
-                {"format_id": "140", "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2", "filesize": 9_700_000.0},
                 {"format_id": "251", "ext": "webm", "vcodec": "none", "acodec": "opus", "filesize": 10_000_000.0},
-                {"format_id": "137", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 1080, "filesize": 200_000_000.0, "tbr": 2600.0},
-                {"format_id": "248", "ext": "webm", "vcodec": "vp9", "acodec": "none", "height": 1080, "filesize_approx": 150_000_000.0, "tbr": 2000.0},
-                {"format_id": "136", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 720, "tbr": 1300.0},
+                {"format_id": "140", "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2", "filesize": 9_700_000.0},
                 {"format_id": "18", "ext": "mp4", "vcodec": "avc1", "acodec": "mp4a", "height": 360, "filesize": 30_000_000.0},
+                {"format_id": "136", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 720, "tbr": 1300.0},
+                {"format_id": "248", "ext": "webm", "vcodec": "vp9", "acodec": "none", "height": 1080, "filesize_approx": 150_000_000.0, "tbr": 2000.0},
+                {"format_id": "137", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 1080, "filesize": 200_000_000.0, "tbr": 2600.0},
+                {"format_id": "399", "ext": "mp4", "vcodec": "av01", "acodec": "none", "height": 1080, "filesize": 82_000_000.0, "tbr": 1100.0},
                 {"format_id": "drm1", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 2160, "has_drm": true}
             ]
         })
@@ -681,12 +690,15 @@ mod tests {
         let info = build_info("https://x", &yt_like()).unwrap();
         let labels: Vec<_> = info.options.iter().map(|o| format!("{} {}", o.label, o.container)).collect();
         assert_eq!(labels, ["1080p MP4", "720p MP4", "360p MP4", "Audio uniquement MP3", "Audio uniquement M4A"]);
-        // 1080p : meilleur débit (137, 200 Mo) + meilleur audio (10 Mo).
-        assert_eq!(info.options[0].est_size, Some(210_000_000));
+        // 1080p : le flux que yt-dlp choisira (399, AV1 en MP4, 82 Mo), pas le plus lourd (137, 200 Mo),
+        // plus la meilleure piste audio selon le même tri (140, M4A, 9,7 Mo).
+        assert_eq!(info.options[0].est_size, Some(82_000_000 + 9_700_000));
         // 720p : estimé depuis le débit (1300 kb/s × 600 s) + audio.
-        assert_eq!(info.options[1].est_size, Some(97_500_000 + 10_000_000));
+        assert_eq!(info.options[1].est_size, Some(97_500_000 + 9_700_000));
         // 360p : flux combiné, pas d'audio ajouté.
         assert_eq!(info.options[2].est_size, Some(30_000_000));
+        // M4A : la piste M4A, pas l'Opus.
+        assert_eq!(info.options[4].est_size, Some(9_700_000));
         assert!(info.drm_filtered, "la 4K chiffrée est écartée");
         assert_eq!(info.subtitle_langs, ["en", "fr"]);
         assert_eq!(info.site.as_deref(), Some("YouTube"));

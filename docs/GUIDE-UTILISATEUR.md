@@ -26,6 +26,24 @@ si un site cesse de fonctionner, une mise à jour de yt-dlp suffit généralemen
 Ne sont pas téléchargeables : les vidéos protégées par DRM (Netflix, Disney+…), les directs, et pour l'instant
 les listes de lecture. Respectez les conditions d'utilisation des sites et les droits des auteurs.
 
+## Extension du navigateur
+
+**Bouton « Télécharger cette vidéo ».** Survolez une vidéo : le bouton apparaît en haut à droite du lecteur.
+Cliquez pour voir les formats réellement disponibles, puis choisissez-en un : la vidéo part dans NDM. Les
+vidéos protégées par DRM sont signalées comme telles.
+
+**Téléchargements du navigateur.** En mode **Automatique**, les fichiers reconnus (archives, programmes, vidéos,
+musique, PDF…) sont repris par NDM ; si NDM n'est pas disponible, le navigateur télécharge normalement. En mode
+**Manuel**, le navigateur garde ses téléchargements ; faites un clic droit sur un lien, puis **Télécharger avec
+Nova Download Manager**.
+
+**Fenêtre de l'extension** (icône NDM dans la barre d'outils) : état de la connexion, téléchargements en cours,
+fichiers de la page à envoyer en une fois, et réglages. NDM est lancé automatiquement quand l'extension en a
+besoin.
+
+**Cookies.** Certains fichiers ne sont accessibles qu'une fois connecté au site. Activez « Transmettre les
+cookies du site à NDM » pour qu'il puisse les récupérer ; le navigateur vous demandera l'autorisation.
+
 ## Gérer les téléchargements
 
 | Action | Souris | Clavier |
