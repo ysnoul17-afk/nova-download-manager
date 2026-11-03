@@ -1,0 +1,28 @@
+[package]
+name = "nova-download-manager"
+description = "Nova Download Manager — gestionnaire de téléchargements pour Windows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+default-run = "nova-download-manager"
+
+[lib]
+name = "ndm_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ndm-engine = { path = "../../../crates/ndm-engine" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tauri = { version = "2.12.5", features = ["tray-icon"] }
+tauri-plugin-dialog = "2.8.4"
+tauri-plugin-opener = "2.7.2"
+tauri-plugin-single-instance = "2.5.5"
+tokio = { version = "1.54.1", features = ["sync"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = "1.29.0"
