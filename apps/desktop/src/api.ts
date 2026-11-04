@@ -111,11 +111,20 @@ export interface AddOptions {
   startPaused?: boolean;
   priority?: Priority;
   connections?: number | null;
+  allowDuplicates?: boolean;
 }
 
 export interface AddResult {
   added: DownloadInfo[];
   failed: { url: string; error: string }[];
+  /** Déjà téléchargés (fichier présent) : non ajoutés, à confirmer. */
+  duplicates: DownloadInfo[];
+}
+
+/** Doublon reçu du navigateur, en attente de décision. */
+export interface DuplicateNotice {
+  key: string;
+  existing: DownloadInfo;
 }
 
 // --- Vidéo ------------------------------------------------------------------
@@ -209,6 +218,8 @@ export const api = {
     invoke<DownloadInfo>("add_media", { options }),
   toolsStatus: () => invoke<ToolsStatus>("tools_status"),
   installTools: (which: Tool[]) => invoke<ToolsStatus>("install_tools", { which }),
+  redownloadDuplicate: (key: string) => invoke<DownloadInfo>("redownload_duplicate", { key }),
+  dismissDuplicate: (key: string) => invoke<void>("dismiss_duplicate", { key }),
   getAutostart: () => invoke<boolean>("get_autostart"),
   setAutostart: (enabled: boolean) => invoke<boolean>("set_autostart", { enabled }),
   checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
@@ -221,3 +232,4 @@ export const EVENT_RESYNC = "ndm://resync";
 export const EVENT_TOOLS = "ndm://tools";
 export const EVENT_CLIPBOARD = "ndm://clipboard";
 export const EVENT_UPDATE = "ndm://update";
+export const EVENT_DUPLICATE = "ndm://duplicate";

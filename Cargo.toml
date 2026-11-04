@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/ndm-engine", "apps/desktop/src-tauri", "crates/ndm-ipc", "crates/ndm-native-host"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 license = "MIT"
 authors = ["Yassine Oulghazi"]

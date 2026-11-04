@@ -567,3 +567,20 @@ async fn rejects_directory_traversal() {
     let i = engine.add(evil).unwrap();
     assert!(!i.filename.contains('\\') && !i.filename.contains('/'));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn finds_completed_duplicates() {
+    let (base, _) = spawn_server(50_000, Opts { ranges: true, content_length: true, ..Default::default() }).await;
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = Engine::start(tmp.path(), config(tmp.path())).unwrap();
+    let url = format!("{base}/setup.exe");
+    assert!(engine.find_completed(&url, None).is_none());
+    let i = add(&engine, url.clone());
+    let done = wait_done(&engine, i.id, 15).await;
+    assert_eq!(engine.find_completed(&url, None).map(|d| d.id), Some(done.id));
+    // Une vidéo de la même adresse n'est pas un doublon d'un fichier, et inversement.
+    assert!(engine.find_completed(&url, Some("1080p MP4")).is_none());
+    // Fichier supprimé du disque : plus considéré comme téléchargé.
+    std::fs::remove_file(done.full_path()).unwrap();
+    assert!(engine.find_completed(&url, None).is_none());
+}

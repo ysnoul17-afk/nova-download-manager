@@ -38,8 +38,8 @@ n'est pas signé numériquement, il est lui aussi bloqué lorsque cette protecti
 
 ```
 target\release\nova-download-manager.exe                                 application seule
-target\release\bundle\nsis\Nova Download Manager_0.4.0_x64-setup.exe     installateur (recommandé)
-target\release\bundle\msi\Nova Download Manager_0.4.0_x64_fr-FR.msi       installateur MSI
+target\release\bundle\nsis\Nova Download Manager_0.4.1_x64-setup.exe     installateur (recommandé)
+target\release\bundle\msi\Nova Download Manager_0.4.1_x64_fr-FR.msi       installateur MSI
 ```
 
 L'installateur NSIS s'installe pour l'utilisateur courant, sans droits administrateur. La désinstallation

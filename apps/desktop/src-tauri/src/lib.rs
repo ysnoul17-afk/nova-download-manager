@@ -47,6 +47,8 @@ impl Default for UiSettings {
 
 pub struct AppState {
     pub engine: Engine,
+    /// Téléchargements reçus du navigateur et mis en attente parce qu'ils existent déjà.
+    pub pending_duplicates: std::sync::Mutex<std::collections::HashMap<String, ndm_engine::AddRequest>>,
 }
 
 impl AppState {
@@ -141,7 +143,7 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { engine });
+            app.manage(AppState { engine, pending_duplicates: Default::default() });
             tray::create(app.handle())?;
 
             // Fenêtre masquée au démarrage si lancé par l'extension (« --minimized »).
@@ -182,6 +184,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::list_downloads,
             commands::add_downloads,
+            commands::redownload_duplicate,
+            commands::dismiss_duplicate,
             commands::pause_downloads,
             commands::resume_downloads,
             commands::stop_downloads,

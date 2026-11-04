@@ -232,6 +232,18 @@ impl Engine {
         self.inner.entries.read().get(&id).map(|e| e.shared.record.lock().segments.clone())
     }
 
+    /// Téléchargement déjà terminé pour la même adresse (et la même qualité vidéo),
+    /// dont le fichier existe encore sur le disque. Le plus récent en premier.
+    pub fn find_completed(&self, url: &str, media_label: Option<&str>) -> Option<DownloadInfo> {
+        let norm = url::Url::parse(url.trim()).map(|u| u.to_string()).unwrap_or_else(|_| url.trim().to_string());
+        self.list().into_iter().find(|i| {
+            i.status == DownloadStatus::Completed
+                && (i.url == norm || i.final_url.as_deref() == Some(norm.as_str()))
+                && i.media_label.as_deref() == media_label
+                && i.full_path().is_file()
+        })
+    }
+
     pub fn get(&self, id: DownloadId) -> Option<DownloadInfo> {
         let conns = self.inner.ctx.config.read().connections_per_download;
         self.inner.entries.read().get(&id).map(|e| e.info(conns))

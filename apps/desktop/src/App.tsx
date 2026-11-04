@@ -1,13 +1,14 @@
 import { CheckCircle2, CircleAlert, Clock, Download, History, Layers, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, CATEGORIES, EVENT_CLIPBOARD, EVENT_UPDATE, type DownloadInfo, type UiSettings, type UpdateInfo, type UpdateProgress } from "./api";
+import { api, CATEGORIES, EVENT_CLIPBOARD, EVENT_DUPLICATE, EVENT_UPDATE, type DuplicateNotice, type DownloadInfo, type UiSettings, type UpdateInfo, type UpdateProgress } from "./api";
 import { AddDialog } from "./components/AddDialog";
 import { CategoryIcon, ToastProvider, useToast } from "./components/common";
 import { DownloadsView, matchesFilter, type ListFilter } from "./components/DownloadsView";
 import { HistoryView } from "./components/HistoryView";
 import { SettingsView } from "./components/SettingsView";
 import { UpdateDialog } from "./components/Updates";
+import { DuplicateDialog } from "./components/DuplicateDialog";
 import { CATEGORY_LABEL, errorText, formatSpeed } from "./format";
 import { useDownloads } from "./useDownloads";
 
@@ -96,6 +97,7 @@ function Shell() {
   // Coller une adresse n'importe où (hors champ de saisie) ouvre la fenêtre d'ajout.
   const [pasted, setPasted] = useState("");
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [duplicate, setDuplicate] = useState<DuplicateNotice | null>(null);
   const [showUpdate, setShowUpdate] = useState(false);
 
   // Lien copié dans une autre application (si le réglage est activé) : fenêtre d'ajout pré-remplie.
@@ -106,6 +108,7 @@ function Shell() {
       setPasted(payload);
       setAdding(true);
     }).then((u) => uns.push(u));
+    listen<DuplicateNotice>(EVENT_DUPLICATE, ({ payload }) => setDuplicate(payload)).then((u) => uns.push(u));
     listen<UpdateProgress>(EVENT_UPDATE, ({ payload }) => {
       if (payload.phase === "available") setUpdate(payload.info);
     }).then((u) => uns.push(u));
@@ -263,6 +266,32 @@ function Shell() {
         </footer>
       </main>
 
+      {duplicate && (
+        <DuplicateDialog
+          items={[duplicate.existing]}
+          onOpen={(d) => {
+            api.openFile(d.id).catch((e) => toast(errorText(e), "error"));
+            api.dismissDuplicate(duplicate.key).catch(() => {});
+            setDuplicate(null);
+          }}
+          onReveal={(d) => {
+            api.openFolder(d.id).catch((e) => toast(errorText(e), "error"));
+            api.dismissDuplicate(duplicate.key).catch(() => {});
+            setDuplicate(null);
+          }}
+          onRedownload={() => {
+            api
+              .redownloadDuplicate(duplicate.key)
+              .then(() => toast("Nouvelle copie en cours de téléchargement."))
+              .catch((e) => toast(errorText(e), "error"));
+            setDuplicate(null);
+          }}
+          onClose={() => {
+            api.dismissDuplicate(duplicate.key).catch(() => {});
+            setDuplicate(null);
+          }}
+        />
+      )}
       {showUpdate && update && <UpdateDialog info={update} onClose={() => setShowUpdate(false)} />}
       {adding && (
         <AddDialog

@@ -1,13 +1,13 @@
 //! Intégration avec l'extension du navigateur : serveur local et enregistrement de l'hôte natif.
 
-use crate::{media_cmds, show_main_window, AppState};
+use crate::{media_cmds, show_main_window, system, AppState};
 use ndm_engine::{AddRequest, DownloadStatus, MediaSpec};
 use ndm_ipc::{server, Reply, HOST_NAME};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Identifiant fixe de l'extension (dérivé de la clé publique de son manifeste).
 pub const EXTENSION_ID: &str = "eogmknmllnjfblmecmcngbbpgikhigjc";
@@ -81,8 +81,15 @@ async fn handle_request(app: &AppHandle, req: Value) -> Reply {
                 size_hint: req.get("size").and_then(Value::as_u64).filter(|s| *s > 0),
                 ..Default::default()
             };
+            if let Some(existing) = engine.find_completed(url, None) {
+                return hold_duplicate(app, &state, existing, request);
+            }
             match engine.add(request) {
-                Ok(i) => Reply::ok(json!({ "id": i.id, "filename": i.filename })),
+                Ok(i) => {
+                    let name = if i.filename.is_empty() { url.to_string() } else { i.filename.clone() };
+                    system::notify(app, "Repris par Nova Download Manager", &name);
+                    Reply::ok(json!({ "id": i.id, "filename": i.filename }))
+                }
                 Err(e) => Reply::err("add_failed", e.to_string()),
             }
         }
@@ -105,12 +112,16 @@ async fn handle_request(app: &AppHandle, req: Value) -> Reply {
                 Some(Ok(s)) => s,
                 _ => return Reply::err("invalid_request", "Qualité invalide."),
             };
+            let label = spec.label.clone();
             let request = AddRequest {
                 url: url.to_string(),
                 size_hint: spec.est_size,
                 media: Some(spec),
                 ..Default::default()
             };
+            if let Some(existing) = engine.find_completed(url, Some(&label)) {
+                return hold_duplicate(app, &state, existing, request);
+            }
             match engine.add(request) {
                 Ok(i) => Reply::ok(json!({ "id": i.id })),
                 Err(e) => Reply::err("add_failed", e.to_string()),
@@ -145,6 +156,24 @@ async fn handle_request(app: &AppHandle, req: Value) -> Reply {
 
         _ => Reply::err("invalid_request", "Requête inconnue."),
     }
+}
+
+pub const EVENT_DUPLICATE: &str = "ndm://duplicate";
+
+/// Fichier déjà téléchargé : on ne crée pas de copie, on demande à l'utilisateur.
+/// La requête (avec ses en-têtes) est conservée pour « Télécharger à nouveau ».
+fn hold_duplicate(app: &AppHandle, state: &AppState, existing: ndm_engine::DownloadInfo, request: AddRequest) -> Reply {
+    let key = uuid::Uuid::new_v4().to_string();
+    if let Ok(mut p) = state.pending_duplicates.lock() {
+        // Pas d'accumulation si l'utilisateur ignore les demandes.
+        if p.len() > 20 {
+            p.clear();
+        }
+        p.insert(key.clone(), request);
+    }
+    show_main_window(app);
+    let _ = app.emit(EVENT_DUPLICATE, json!({ "key": key, "existing": existing }));
+    Reply::ok(json!({ "duplicate": true, "id": existing.id, "filename": existing.filename }))
 }
 
 // ---------------------------------------------------------------------------

@@ -70,6 +70,25 @@ impl Notifier {
     }
 }
 
+/// Notification ponctuelle (interception, doublon), si l'utilisateur les a activées
+/// et que la fenêtre de NDM n'est pas déjà au premier plan.
+pub fn notify(app: &AppHandle, title: &str, body: &str) {
+    let Some(state) = app.try_state::<AppState>() else { return };
+    if !state.ui_settings().notifications {
+        return;
+    }
+    let focused = app
+        .get_webview_window("main")
+        .map(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false))
+        .unwrap_or(false);
+    if focused {
+        return;
+    }
+    if let Err(e) = app.notification().builder().title(title).body(body).show() {
+        tracing::warn!("notification impossible : {e}");
+    }
+}
+
 fn format_size(b: u64) -> String {
     const U: [&str; 5] = ["o", "Ko", "Mo", "Go", "To"];
     let mut v = b as f64;

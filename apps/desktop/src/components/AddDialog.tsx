@@ -1,9 +1,10 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { api, type MediaInfo, type MediaSpec, type Priority } from "../api";
+import { api, type DownloadInfo, type MediaInfo, type MediaSpec, type Priority } from "../api";
 import { errorText, PRIORITY_LABEL } from "../format";
 import { Modal, useToast } from "./common";
+import { DuplicateDialog } from "./DuplicateDialog";
 import { MediaPicker } from "./MediaPicker";
 import { ToolsPanel } from "./ToolsPanel";
 
@@ -20,7 +21,8 @@ type Step =
   | { kind: "media"; info: MediaInfo }
   | { kind: "tools" }
   | { kind: "page"; message: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  | { kind: "duplicates"; items: DownloadInfo[] };
 
 export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; initialText?: string }) {
   const toast = useToast();
@@ -42,20 +44,25 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
   };
 
   /** Ajout direct (fichiers, ou lots : les sites vidéo connus passent par yt-dlp). */
-  const addFiles = async () => {
+  const addFiles = async (only?: string[], allowDuplicates = false) => {
     setBusy(true);
     try {
       const res = await api.add({
-        urls,
+        urls: only ?? urls,
         directory,
         filename: single && filename.trim() ? filename.trim() : null,
         priority,
         startPaused,
         connections,
+        allowDuplicates,
       });
       if (res.failed.length) toast(res.failed.map((f) => `${f.url} : ${f.error}`).join("\n"), "error");
       if (res.added.length) {
         toast(res.added.length === 1 ? "Téléchargement ajouté." : `${res.added.length} téléchargements ajoutés.`);
+      }
+      if (res.duplicates.length) {
+        setStep({ kind: "duplicates", items: res.duplicates });
+      } else if (res.added.length) {
         onClose();
       }
     } catch (e) {
@@ -72,8 +79,8 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
       const r = await api.analyzeUrl(urls[0]);
       switch (r.kind) {
         case "file":
-          await addFiles();
           setStep({ kind: "input" });
+          await addFiles();
           return;
         case "media":
           setStep({ kind: "media", info: r.info });
@@ -114,6 +121,19 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
   };
 
   // --- Étapes après analyse -------------------------------------------------
+
+  if (step.kind === "duplicates") {
+    const run = (p: Promise<unknown>) => p.then(onClose).catch((e) => toast(errorText(e), "error"));
+    return (
+      <DuplicateDialog
+        items={step.items}
+        onOpen={(d) => run(api.openFile(d.id))}
+        onReveal={(d) => run(api.openFolder(d.id))}
+        onRedownload={() => addFiles(step.items.map((d) => d.url), true)}
+        onClose={onClose}
+      />
+    );
+  }
 
   if (step.kind === "media") {
     return (
@@ -171,7 +191,7 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
             <button className="btn btn-ghost grow-left" onClick={() => setStep({ kind: "input" })}>
               Retour
             </button>
-            <button className="btn" onClick={addFiles} disabled={busy}>
+            <button className="btn" onClick={() => addFiles()} disabled={busy}>
               {step.kind === "page" ? "Enregistrer la page web" : "Télécharger quand même"}
             </button>
             <button className="btn btn-primary" onClick={onClose} data-autofocus>

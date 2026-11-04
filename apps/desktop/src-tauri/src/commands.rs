@@ -34,6 +34,9 @@ pub struct AddOptions {
     #[serde(default)]
     pub priority: Priority,
     pub connections: Option<u8>,
+    /// Ajouter même si le fichier a déjà été téléchargé.
+    #[serde(default)]
+    pub allow_duplicates: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -46,6 +49,8 @@ pub struct AddFailure {
 pub struct AddResult {
     pub added: Vec<DownloadInfo>,
     pub failed: Vec<AddFailure>,
+    /// Adresses déjà téléchargées (fichier présent), non ajoutées : à confirmer.
+    pub duplicates: Vec<DownloadInfo>,
 }
 
 /// Ajout unitaire ou par lots. Les lignes vides et les doublons sont ignorés.
@@ -63,9 +68,16 @@ pub fn add_downloads(state: State<'_, AppState>, options: AddOptions) -> AddResu
 
     let mut added = Vec::new();
     let mut failed = Vec::new();
+    let mut duplicates = Vec::new();
     for url in urls {
         // Ajout par lots : les adresses de sites vidéo passent par yt-dlp (meilleure qualité).
         let media = crate::media_cmds::batch_media_spec(&url);
+        if !options.allow_duplicates {
+            if let Some(d) = state.engine.find_completed(&url, media.as_ref().map(|m| m.label.as_str())) {
+                duplicates.push(d);
+                continue;
+            }
+        }
         let req = AddRequest {
             url: url.clone(),
             filename: if media.is_some() { None } else { filename.clone() },
@@ -81,7 +93,26 @@ pub fn add_downloads(state: State<'_, AppState>, options: AddOptions) -> AddResu
             Err(e) => failed.push(AddFailure { url, error: e.to_string() }),
         }
     }
-    AddResult { added, failed }
+    AddResult { added, failed, duplicates }
+}
+
+/// « Télécharger à nouveau » pour un doublon reçu du navigateur.
+#[tauri::command]
+pub fn redownload_duplicate(state: State<'_, AppState>, key: String) -> CmdResult<DownloadInfo> {
+    let req = state
+        .pending_duplicates
+        .lock()
+        .map_err(err)?
+        .remove(&key)
+        .ok_or("Cette demande a expiré : relancez le téléchargement depuis le navigateur.")?;
+    state.engine.add(req).map_err(err)
+}
+
+#[tauri::command]
+pub fn dismiss_duplicate(state: State<'_, AppState>, key: String) {
+    if let Ok(mut p) = state.pending_duplicates.lock() {
+        p.remove(&key);
+    }
 }
 
 fn for_each(ids: Vec<DownloadId>, mut f: impl FnMut(DownloadId) -> ndm_engine::Result<()>) -> CmdResult<()> {

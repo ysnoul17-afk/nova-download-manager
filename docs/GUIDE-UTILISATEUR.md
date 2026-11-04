@@ -44,6 +44,13 @@ besoin.
 **Cookies.** Certains fichiers ne sont accessibles qu'une fois connecté au site. Activez « Transmettre les
 cookies du site à NDM » pour qu'il puisse les récupérer ; le navigateur vous demandera l'autorisation.
 
+## Fichiers déjà téléchargés
+
+Si vous relancez un fichier (ou une vidéo dans la même qualité) que NDM a déjà téléchargé et qui est toujours
+sur le disque, NDM ne crée pas de copie : il propose **Ouvrir**, **Afficher dans le dossier** ou **Télécharger
+à nouveau**. Quand l'extension reprend un téléchargement du navigateur, une notification « Repris par Nova
+Download Manager » l'indique.
+
 ## Gérer les téléchargements
 
 | Action | Souris | Clavier |
