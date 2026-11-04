@@ -27,7 +27,7 @@ expert indépendant, à prévoir si l'application est diffusée largement.
 | 10 | Faible | Adresse de mise à jour modifiable par variable d'environnement | Corrigé (0.4.2) |
 | 11 | Faible | Canal nommé avec la protection Windows par défaut | Accepté (voir détail) |
 | 12 | Faible | Interface de l'extension accessible au JavaScript de la page | Accepté (voir détail) |
-| 13 | Info | Adresse e-mail personnelle visible dans l'historique Git public | Traitement en cours |
+| 13 | Info | Adresse e-mail personnelle visible dans l'historique Git public | Corrigé (historique réécrit) |
 
 ## Constats corrigés
 
@@ -46,7 +46,7 @@ bloquées**.
 *Correction :* chaque fichier terminé (fichiers et vidéos) reçoit `ZoneId=3` (Internet), avec l'adresse
 d'origine et le référent, sans identifiants éventuellement présents dans l'adresse. *Test :* contenu vérifié par
 `zone_identifier_content` ; écriture du flux propre à Windows, à confirmer sur la première version publiée
-(voir « Vérifications à faire »).
+(vérifiée sous Windows, voir plus bas).
 
 **3. Ouverture de scripts sans avertissement (élevée).** La confirmation ne portait que sur la catégorie
 « Logiciels ». Un `.js`, `.vbs`, `.hta`, `.scr` ou `.lnk` (classé « Autres ») s'exécutait au double-clic.
@@ -114,6 +114,11 @@ toute façon la vidéo qu'elle affiche. Un mode « fermé » est possible mais c
 - **Dépôt public** : aucun secret versionné ; clé privée et mot de passe uniquement dans les secrets GitHub ;
   une copie (fork) ou une proposition de modification ne peut pas déclencher de publication.
 
+**13. Adresse e-mail dans l'historique (info).** Les enregistrements publiés portaient l'adresse personnelle
+de l'auteur. *Correction :* historique réécrit avec l'adresse anonyme fournie par GitHub
+(`…@users.noreply.github.com`), anciennes versions et étiquettes supprimées, option GitHub « Block command line
+pushes that expose my email » activée.
+
 ## Recommandations pour l'utilisateur
 
 1. **Activer la double authentification GitHub** : la prise de contrôle du compte permettrait de publier une
@@ -125,8 +130,8 @@ toute façon la vidéo qu'elle affiche. Un mode « fermé » est possible mais c
 5. **N'activer la transmission des cookies** que si nécessaire.
 6. **Suspendre l'application Claude sur GitHub** quand le projet n'est pas en cours de modification.
 
-## Vérifications à faire sur Windows (0.4.2)
+## Vérifié sur Windows (0.4.2)
 
-- Propriétés d'un `.exe` téléchargé par NDM → onglet *Général* : la mention « Ce fichier provient d'un autre
-  ordinateur… » doit apparaître (preuve de la marque Internet).
-- Double-clic sur un `.js` téléchargé : la demande de confirmation doit s'afficher.
+- Propriétés d'un `.exe` téléchargé par NDM → onglet *Général* : mention « Ce fichier provient d'un autre
+  ordinateur… » présente (marque Internet effective).
+- Double-clic sur ce `.exe` dans NDM : demande de confirmation affichée, avec la provenance réelle du fichier.
