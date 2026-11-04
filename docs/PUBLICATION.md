@@ -23,13 +23,15 @@ au dépôt.** Si vous les perdez, les versions déjà installées ne pourront pl
 
 1. Mettre le même numéro dans `Cargo.toml` (`[workspace.package]`), `crates/ndm-engine/Cargo.toml`,
    `apps/desktop/package.json` et `apps/desktop/src-tauri/tauri.conf.json`.
-2. Envoyer le code sur `main`. Le workflow *Publication* (`.github/workflows/release.yml`) voit qu'aucune
+2. Décrire les nouveautés dans `CHANGELOG.md`, sous un titre `## X.Y.Z` : ce texte est affiché dans la
+   fenêtre de mise à jour de NDM et sur la page de la version.
+3. Envoyer le code sur `main`. Le workflow *Publication* (`.github/workflows/release.yml`) voit qu'aucune
    étiquette `vX.Y.Z` n'existe pour ce numéro et publie la version ; un envoi sans changement de numéro ne
    publie rien. Il peut aussi être lancé à la main depuis l'onglet *Actions*.
-3. Sur un serveur Windows de GitHub : tests, compilation, signature des artefacts de mise à jour, création de
+4. Sur un serveur Windows de GitHub : tests, compilation, signature des artefacts de mise à jour, création de
    l'étiquette et de la Release avec l'installateur `.exe`, le `.msi`, `latest.json` et l'extension en `.zip`.
    Durée : 15 à 25 minutes.
-4. Au démarrage suivant, les NDM installés affichent « Version x.y.z disponible » dans la barre d'état.
+5. Au démarrage suivant, les NDM installés affichent « Version x.y.z disponible » dans la barre d'état.
 
 La compilation locale (`scripts\build-windows.ps1`) ne produit pas d'artefacts de mise à jour et n'a pas
 besoin de la clé privée.

@@ -73,6 +73,23 @@ jobs:
           npm run build
           Compress-Archive -Path dist\* -DestinationPath ..\..\nova-download-manager-extension.zip -Force
 
+      - name: Notes de version (CHANGELOG.md)
+        id: notes
+        shell: pwsh
+        run: |
+          $version = "${{ needs.version.outputs.tag }}".TrimStart("v")
+          $lines = Get-Content CHANGELOG.md -Encoding utf8
+          $start = [array]::IndexOf($lines, "## $version")
+          if ($start -lt 0) { $notes = "Corrections et améliorations." }
+          else {
+            $section = @()
+            for ($i = $start + 1; $i -lt $lines.Count -and -not $lines[$i].StartsWith("## "); $i++) { $section += $lines[$i] }
+            $notes = ($section -join "`n").Trim()
+          }
+          "body<<NDM_NOTES" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $notes | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "NDM_NOTES" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Compilation, signature et publication
         uses: tauri-apps/tauri-action@v0
         env:
@@ -84,10 +101,8 @@ jobs:
           tagName: ${{ needs.version.outputs.tag }}
           releaseCommitish: ${{ github.sha }}
           releaseName: Nova Download Manager ${{ needs.version.outputs.tag }}
-          releaseBody: |
-            Installation : téléchargez « Nova.Download.Manager_*_x64-setup.exe ».
-            Extension Chrome / Edge : « nova-download-manager-extension.zip » (à décompresser, puis « Charger l'extension non empaquetée »).
-            Les utilisateurs existants reçoivent cette version par la mise à jour intégrée.
+          # Ces notes sont aussi celles affichées dans la fenêtre de mise à jour de NDM.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
