@@ -218,7 +218,7 @@ pub fn register_native_host(data_dir: &Path) -> Result<PathBuf, String> {
             r"Software\BraveSoftware\Brave-Browser\NativeMessagingHosts",
         ] {
             let key = format!(r"HKCU\{base}\{HOST_NAME}");
-            let status = std::process::Command::new("reg")
+            let status = std::process::Command::new(ndm_engine::media::system32("reg.exe"))
                 .args(["add", &key, "/ve", "/t", "REG_SZ", "/d"])
                 .arg(&manifest_path)
                 .arg("/f")

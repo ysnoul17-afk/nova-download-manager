@@ -24,6 +24,28 @@ pub struct MediaTools {
     pub ytdlp: Option<PathBuf>,
     /// Dossier contenant `ffmpeg` et `ffprobe`.
     pub ffmpeg_dir: Option<PathBuf>,
+    /// Version de yt-dlp (AAAA.MM.JJ), pour n'utiliser que les options qu'elle connaît.
+    #[serde(default)]
+    pub ytdlp_version: Option<String>,
+}
+
+impl MediaTools {
+    /// `--no-plugin-dirs` (yt-dlp 2025.02.19 et suivants) : aucune extension chargée depuis le profil.
+    /// Version inconnue : on suppose une version récente (celle installée par NDM).
+    fn isolation_args(&self) -> &'static [&'static str] {
+        let recent = match self.ytdlp_version.as_deref().and_then(|v| v.get(..10)) {
+            Some(v) => v >= "2025.02.19",
+            None => true,
+        };
+        if recent { &["--no-plugin-dirs"] } else { &[] }
+    }
+}
+
+/// Programme système Windows, désigné par son chemin complet dans System32.
+#[cfg(windows)]
+pub fn system32(exe: &str) -> PathBuf {
+    let root = std::env::var_os("SystemRoot").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
+    root.join("System32").join(exe)
 }
 
 /// Prépare une commande sans fenêtre console (Windows) et dans son propre groupe
@@ -48,7 +70,7 @@ async fn kill_tree(child: &mut tokio::process::Child) {
     if let Some(pid) = child.id() {
         #[cfg(windows)]
         {
-            let mut k = Command::new("taskkill");
+            let mut k = Command::new(crate::media::system32("taskkill.exe"));
             k.args(["/PID", &pid.to_string(), "/T", "/F"]).stdout(Stdio::null()).stderr(Stdio::null());
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             k.creation_flags(CREATE_NO_WINDOW);
@@ -381,6 +403,7 @@ pub async fn analyze(tools: &MediaTools, url: &str, cancel: &CancellationToken) 
     let ytdlp = tools.ytdlp.as_ref().ok_or_else(|| EngineError::Other("yt-dlp n'est pas installé.".into()))?;
     let mut c = command(ytdlp);
     c.args(["--ignore-config", "-J", "--no-playlist", "--no-warnings", "--encoding", "utf-8", "-S", FORMAT_SORT]);
+    c.args(tools.isolation_args());
     if let Some(d) = &tools.ffmpeg_dir {
         c.arg("--ffmpeg-location").arg(d);
     }
@@ -536,6 +559,7 @@ pub async fn download(
 ) -> Result<PathBuf> {
     let ytdlp = tools.ytdlp.as_ref().ok_or_else(|| EngineError::Other("yt-dlp n'est pas installé.".into()))?;
     let mut c = command(ytdlp);
+    c.args(tools.isolation_args());
     c.args([
         "--ignore-config",
         "--no-playlist",
@@ -758,6 +782,14 @@ mod tests {
         assert!(friendly_error("ERROR: [youtube] x: Video unavailable").contains("indisponible"));
         assert!(friendly_error("ERROR: This video is DRM protected").contains("DRM"));
         assert!(friendly_error("ERROR: étrange").starts_with("yt-dlp : "));
+    }
+
+    #[test]
+    fn plugin_isolation_only_for_recent_ytdlp() {
+        let t = |v: Option<&str>| MediaTools { ytdlp_version: v.map(str::to_string), ..Default::default() };
+        assert_eq!(t(Some("2026.10.26")).isolation_args(), &["--no-plugin-dirs"]);
+        assert!(t(Some("2024.12.23")).isolation_args().is_empty());
+        assert_eq!(t(None).isolation_args(), &["--no-plugin-dirs"]);
     }
 
     #[test]

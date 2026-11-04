@@ -5,6 +5,7 @@ import { api, type DownloadInfo, type MediaInfo, type MediaSpec, type Priority }
 import { errorText, PRIORITY_LABEL } from "../format";
 import { Modal, useToast } from "./common";
 import { DuplicateDialog } from "./DuplicateDialog";
+import { openDownloaded } from "../open";
 import { MediaPicker } from "./MediaPicker";
 import { ToolsPanel } from "./ToolsPanel";
 
@@ -127,7 +128,7 @@ export function AddDialog({ onClose, initialText = "" }: { onClose: () => void; 
     return (
       <DuplicateDialog
         items={step.items}
-        onOpen={(d) => run(api.openFile(d.id))}
+        onOpen={(d) => run(openDownloaded(d))}
         onReveal={(d) => run(api.openFolder(d.id))}
         onRedownload={() => addFiles(step.items.map((d) => d.url), true)}
         onClose={onClose}

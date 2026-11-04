@@ -194,8 +194,11 @@ enum UpdateProgress {
 }
 
 fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    #[allow(unused_mut)]
     let mut b = app.updater_builder();
-    // Adresse de test (serveur local) ; en production, celle de tauri.conf.json.
+    // Adresse de test (serveur local), uniquement dans les versions de développement ;
+    // en production, seule celle de tauri.conf.json est utilisée.
+    #[cfg(debug_assertions)]
     if let Ok(ep) = std::env::var("NDM_UPDATE_ENDPOINT") {
         let url = ep.parse().map_err(|e| format!("adresse de mise à jour invalide : {e}"))?;
         b = b.endpoints(vec![url]).map_err(|e| e.to_string())?;

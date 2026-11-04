@@ -44,6 +44,7 @@ impl ToolsStatus {
         MediaTools {
             ytdlp: self.ytdlp.as_ref().map(|t| t.path.clone()),
             ffmpeg_dir: self.ffmpeg.as_ref().and_then(|t| t.path.parent().map(Path::to_path_buf)),
+            ytdlp_version: self.ytdlp.as_ref().and_then(|t| t.version.clone()),
         }
     }
 }

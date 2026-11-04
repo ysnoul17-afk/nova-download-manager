@@ -40,6 +40,8 @@ struct Srv {
     current: AtomicUsize,
     peak: AtomicUsize,
     bytes_sent: AtomicU64,
+    /// En-têtes Cookie reçus (pour vérifier qu'ils ne fuient pas vers un autre site).
+    cookies: Mutex<Vec<String>>,
 }
 
 fn make_data(size: usize, seed: u8) -> Vec<u8> {
@@ -54,6 +56,9 @@ impl Drop for ConnGuard {
 }
 
 async fn handler(State(s): State<Arc<Srv>>, headers: HeaderMap) -> Response {
+    if let Some(c) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
+        s.cookies.lock().push(c.to_string());
+    }
     let data = s.data.lock().clone();
     let etag = s.etag.lock().clone();
     let (ranges, content_length, delay, disposition, max_conns, drop_after) = {
@@ -168,6 +173,7 @@ async fn spawn_server(size: usize, opts: Opts) -> (String, Arc<Srv>) {
         current: AtomicUsize::new(0),
         peak: AtomicUsize::new(0),
         bytes_sent: AtomicU64::new(0),
+        cookies: Mutex::new(vec![]),
     });
     let app = Router::new().route("/{*path}", get(handler)).with_state(srv.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -583,4 +589,40 @@ async fn finds_completed_duplicates() {
     // Fichier supprimé du disque : plus considéré comme téléchargé.
     std::fs::remove_file(done.full_path()).unwrap();
     assert!(engine.find_completed(&url, None).is_none());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn cookies_do_not_follow_redirects_to_another_site() {
+    let size = 3 * 1024 * 1024;
+    // Site B (autre port = autre origine), qui reçoit le fichier après redirection.
+    let (cdn, cdn_srv) = spawn_server(size, Opts { ranges: true, content_length: true, ..Default::default() }).await;
+    // Site A : redirige vers B.
+    let target = format!("{cdn}/fichier.zip");
+    let app = Router::new().route(
+        "/{*p}",
+        get(move || {
+            let t = target.clone();
+            async move { Response::builder().status(302).header(header::LOCATION, t).body(Body::empty()).unwrap() }
+        }),
+    );
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let site = format!("http://{}", l.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = Engine::start(tmp.path(), config(tmp.path())).unwrap();
+    let mut headers = std::collections::BTreeMap::new();
+    headers.insert("Cookie".to_string(), "session=secret-du-site-A".to_string());
+    let info = engine.add(AddRequest { url: format!("{site}/telecharger"), headers, ..Default::default() }).unwrap();
+    let done = wait_done(&engine, info.id, 30).await;
+    assert_file(&done, &make_data(size, 7));
+    let seen = cdn_srv.cookies.lock().clone();
+    assert!(seen.is_empty(), "cookies du site A reçus par le site B : {seen:?}");
+    // Et le cookie n'est plus conservé sur le disque une fois le téléchargement terminé.
+    engine.shutdown().await;
+    let c = rusqlite::Connection::open(tmp.path().join("ndm.sqlite3")).unwrap();
+    let mut st = c.prepare("SELECT record FROM downloads").unwrap();
+    let rows: Vec<String> = st.query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].contains("secret-du-site-A"), "cookie conservé en base après la fin");
 }

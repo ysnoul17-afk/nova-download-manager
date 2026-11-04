@@ -197,10 +197,14 @@ pub async fn query_history(state: State<'_, AppState>, query: HistoryQuery) -> C
     state.engine.query(query).await.map_err(err)
 }
 
+/// Code renvoyé quand l'ouverture d'un programme doit d'abord être confirmée par l'utilisateur.
+pub const NEEDS_CONFIRMATION: &str = "NDM_CONFIRM_EXECUTABLE";
+
 /// Ouvre un fichier terminé. On ne reçoit qu'un identifiant, jamais un chemin libre :
-/// l'interface ne peut pas faire ouvrir un fichier arbitraire.
+/// l'interface ne peut pas faire ouvrir un fichier arbitraire. Un fichier qui exécute du code
+/// (exe, js, vbs, hta, lnk, iso…) n'est ouvert qu'avec `confirmed` (réglage activé par défaut).
 #[tauri::command]
-pub fn open_file(app: tauri::AppHandle, state: State<'_, AppState>, id: DownloadId) -> CmdResult<()> {
+pub fn open_file(app: tauri::AppHandle, state: State<'_, AppState>, id: DownloadId, confirmed: Option<bool>) -> CmdResult<()> {
     let info = state.engine.get(id).ok_or("Téléchargement introuvable.")?;
     if info.status != DownloadStatus::Completed {
         return Err("Le fichier n'est pas encore terminé.".into());
@@ -208,6 +212,12 @@ pub fn open_file(app: tauri::AppHandle, state: State<'_, AppState>, id: Download
     let path = info.full_path();
     if !path.exists() {
         return Err("Le fichier a été déplacé ou supprimé.".into());
+    }
+    if ndm_engine::filename::is_executable(&info.filename)
+        && state.ui_settings().confirm_open_executables
+        && confirmed != Some(true)
+    {
+        return Err(NEEDS_CONFIRMATION.into());
     }
     app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(err)
 }

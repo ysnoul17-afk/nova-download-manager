@@ -139,6 +139,9 @@ pub fn extension_for_mime(mime: &str) -> Option<&'static str> {
 pub fn sanitize(name: &str) -> String {
     let mut s: String = name
         .chars()
+        // Caractères de contrôle de direction et invisibles : ils permettent d'afficher
+        // « facture[RLO]fdp.exe » comme « factureexe.pdf ». Supprimés.
+        .filter(|c| !is_invisible_format(*c))
         .map(|c| match c {
             '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
             c if (c as u32) < 32 => '_',
@@ -175,6 +178,17 @@ pub fn sanitize(name: &str) -> String {
     s
 }
 
+fn is_invisible_format(c: char) -> bool {
+    matches!(c,
+        '\u{200B}'..='\u{200F}'   // espaces de largeur nulle, marques LRM/RLM
+        | '\u{202A}'..='\u{202E}' // incorporations et forçages de direction (dont RLO)
+        | '\u{2060}'..='\u{2064}' // jointures invisibles
+        | '\u{2066}'..='\u{2069}' // isolats de direction
+        | '\u{061C}'               // marque de lettre arabe
+        | '\u{FEFF}'               // indicateur d'ordre des octets
+    )
+}
+
 pub fn split_ext(name: &str) -> (&str, Option<&str>) {
     match name.rfind('.') {
         Some(i) if i > 0 && i < name.len() - 1 => (&name[..i], Some(&name[i + 1..])),
@@ -202,6 +216,20 @@ pub fn unique_path(dir: &Path, name: &str, is_taken: impl Fn(&Path) -> bool) -> 
         }
     }
     dir.join(format!("{}-{}", uuid::Uuid::new_v4(), name))
+}
+
+/// Types de fichiers qui exécutent du code (ou en contiennent) quand on les ouvre sous Windows.
+const EXECUTABLE_EXTS: &[&str] = &[
+    "exe", "msi", "msix", "msixbundle", "appx", "appxbundle", "appinstaller", "application", "appref-ms",
+    "bat", "cmd", "com", "scr", "pif", "cpl", "msc", "msp", "gadget", "inf", "reg", "scf", "lnk", "url",
+    "js", "jse", "vbs", "vbe", "wsf", "wsh", "hta", "ps1", "psm1", "psd1", "jar", "dll", "sys",
+    // Images disque : leur contenu échappait à la protection « provenance Internet » de Windows.
+    "iso", "img", "vhd", "vhdx",
+];
+
+/// Vrai si ouvrir ce fichier peut exécuter un programme.
+pub fn is_executable(name: &str) -> bool {
+    split_ext(name).1.map(|e| EXECUTABLE_EXTS.contains(&e.to_ascii_lowercase().as_str())).unwrap_or(false)
 }
 
 pub fn categorize(name: &str) -> Category {
@@ -256,9 +284,23 @@ mod tests {
         assert_eq!(sanitize("CON.txt"), "_CON.txt");
         assert_eq!(sanitize("fichier. . "), "fichier");
         assert_eq!(sanitize(""), "telechargement");
+        // « facture[RLO]fdp.exe » s'afficherait « factureexe.pdf » : l'inversion est supprimée.
+        assert_eq!(sanitize("facture\u{202E}fdp.exe"), "facturefdp.exe");
+        assert_eq!(categorize(&sanitize("facture\u{202E}fdp.exe")), Category::Software);
+        assert_eq!(sanitize("a\u{200B}b\u{2066}.zip"), "ab.zip");
         let long = format!("{}.mp4", "é".repeat(300));
         let s = sanitize(&long);
         assert!(s.len() <= 200 && s.ends_with(".mp4"));
+    }
+
+    #[test]
+    fn executables() {
+        for n in ["setup.exe", "facture.pdf.js", "x.VBS", "a.hta", "raccourci.lnk", "image.iso", "s.scr"] {
+            assert!(is_executable(n), "{n}");
+        }
+        for n in ["film.mp4", "doc.pdf", "archive.zip", "sans_extension"] {
+            assert!(!is_executable(n), "{n}");
+        }
     }
 
     #[test]

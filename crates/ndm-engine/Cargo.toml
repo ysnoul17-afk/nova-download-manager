@@ -1,6 +1,6 @@
 [package]
 name = "ndm-engine"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 
 [dependencies]
@@ -24,4 +24,5 @@ zip = { version = "9.3.0", default-features = false, features = ["deflate"] }
 axum = "0.8.9"
 futures-util = "0.3.34"
 parking_lot = "0.13.0"
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 tempfile = "3.27.0"

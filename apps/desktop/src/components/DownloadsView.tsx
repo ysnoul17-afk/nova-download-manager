@@ -1,7 +1,7 @@
-import { ask } from "@tauri-apps/plugin-dialog";
 import { ArrowDownToLine, Pause, Play, Plus, RotateCcw, Search, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type DownloadInfo, type Priority } from "../api";
+import { openDownloaded } from "../open";
 import {
   canPause,
   canResume,
@@ -47,14 +47,12 @@ export function DownloadsView({
   filter,
   onAdd,
   searchRef,
-  confirmExecutables,
 }: {
   title: string;
   items: Map<string, DownloadInfo>;
   filter: ListFilter;
   onAdd: () => void;
   searchRef: React.RefObject<HTMLInputElement | null>;
-  confirmExecutables: boolean;
 }) {
   const toast = useToast();
   const [search, setSearch] = useState("");
@@ -88,15 +86,9 @@ export function DownloadsView({
 
   const openFile = async (d: DownloadInfo) => {
     if (d.status !== "completed") return;
-    if (confirmExecutables && d.category === "software") {
-      const ok = await ask(
-        `« ${d.filename} » est un programme. Ne l'ouvrez que si vous faites confiance à sa provenance.`,
-        { title: "Ouvrir un programme téléchargé", kind: "warning", okLabel: "Ouvrir", cancelLabel: "Annuler" },
-      );
-      if (!ok) return;
-    }
-    run(api.openFile(d.id));
+    run(openDownloaded(d));
   };
+
 
   const onRowClick = (e: React.MouseEvent, d: DownloadInfo) => {
     if (e.shiftKey && anchor) {

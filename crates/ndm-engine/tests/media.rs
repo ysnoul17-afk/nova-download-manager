@@ -27,7 +27,7 @@ fn tools() -> Option<MediaTools> {
     let ytdlp = PathBuf::from(std::env::var_os("NDM_TEST_YTDLP")?);
     let ffmpeg = which("ffmpeg")?;
     which("ffprobe")?;
-    Some(MediaTools { ytdlp: Some(ytdlp), ffmpeg_dir: ffmpeg.parent().map(Path::to_path_buf) })
+    Some(MediaTools { ytdlp: Some(ytdlp), ffmpeg_dir: ffmpeg.parent().map(Path::to_path_buf), ytdlp_version: None })
 }
 
 macro_rules! require_tools {

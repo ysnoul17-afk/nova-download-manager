@@ -9,6 +9,7 @@ import { HistoryView } from "./components/HistoryView";
 import { SettingsView } from "./components/SettingsView";
 import { UpdateDialog } from "./components/Updates";
 import { DuplicateDialog } from "./components/DuplicateDialog";
+import { openDownloaded } from "./open";
 import { CATEGORY_LABEL, errorText, formatSpeed } from "./format";
 import { useDownloads } from "./useDownloads";
 
@@ -226,7 +227,6 @@ function Shell() {
             filter={view.filter}
             onAdd={() => setAdding(true)}
             searchRef={searchRef}
-            confirmExecutables={ui.confirm_open_executables}
           />
         )}
         {view.kind === "history" && <HistoryView refreshKey={historyKey} />}
@@ -270,7 +270,7 @@ function Shell() {
         <DuplicateDialog
           items={[duplicate.existing]}
           onOpen={(d) => {
-            api.openFile(d.id).catch((e) => toast(errorText(e), "error"));
+            openDownloaded(d).catch((e) => toast(errorText(e), "error"));
             api.dismissDuplicate(duplicate.key).catch(() => {});
             setDuplicate(null);
           }}

@@ -180,7 +180,15 @@ impl EngineCtx {
             .connect_timeout(Duration::from_secs(config.connect_timeout_secs))
             .pool_max_idle_per_host(16)
             .tcp_nodelay(true)
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if attempt.previous().len() >= 10 {
+                    attempt.error("trop de redirections")
+                } else if attempt.previous().last().is_some_and(|prev| is_downgrade(prev, attempt.url())) {
+                    attempt.error("redirection non sécurisée de HTTPS vers HTTP")
+                } else {
+                    attempt.follow()
+                }
+            }))
             .build()?;
         Ok(Self {
             global_limiter: RateLimiter::new(config.global_speed_limit),
@@ -223,6 +231,40 @@ fn build_headers(extra: &BTreeMap<String, String>) -> HeaderMap {
     // Pas de compression : elle fausserait les tailles et les plages d'octets.
     h.insert(header::ACCEPT_ENCODING, HeaderValue::from_static("identity"));
     h
+}
+
+/// En-têtes d'authentification, propres au site qui les a émis.
+pub fn is_sensitive_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "cookie" | "cookie2" | "authorization" | "proxy-authorization"
+    )
+}
+
+/// Même origine (schéma, hôte, port) : condition pour réutiliser cookies et identifiants.
+pub fn same_origin(a: &str, b: &str) -> bool {
+    match (url::Url::parse(a), url::Url::parse(b)) {
+        (Ok(a), Ok(b)) => {
+            a.scheme() == b.scheme() && a.host_str() == b.host_str() && a.port_or_known_default() == b.port_or_known_default()
+        }
+        _ => false,
+    }
+}
+
+/// En-têtes pour requêter `target` : les en-têtes d'authentification ne sont conservés que
+/// si `target` est sur le même site que l'adresse d'origine (après redirection, ils ne suivent pas).
+fn headers_for(origin: &str, target: &str, extra: &BTreeMap<String, String>) -> HeaderMap {
+    if same_origin(origin, target) {
+        return build_headers(extra);
+    }
+    let filtered: BTreeMap<String, String> =
+        extra.iter().filter(|(k, _)| !is_sensitive_header(k)).map(|(k, v)| (k.clone(), v.clone())).collect();
+    build_headers(&filtered)
+}
+
+/// Une redirection de HTTPS vers HTTP exposerait le fichier (et sa requête) en clair.
+pub fn is_downgrade(from: &url::Url, to: &url::Url) -> bool {
+    from.scheme() == "https" && to.scheme() == "http"
 }
 
 /// Analyse `Content-Range: bytes a-b/total`.
@@ -405,7 +447,7 @@ pub async fn run(
         let part = part_path(&final_path);
         let params = RunParams {
             url: info.final_url.clone(),
-            headers: build_headers(&r.headers),
+            headers: headers_for(&r.url, &info.final_url, &r.headers),
             validator: r.validator.clone(),
             resumable: r.resumable,
             min_segment: cfg.min_segment_size.max(64 * 1024),
@@ -490,6 +532,12 @@ pub async fn run(
         p
     };
     std::fs::rename(&part, &final_path)?;
+    let (url, referrer) = {
+        let r = shared.record.lock();
+        let referrer = r.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("referer")).map(|(_, v)| v.clone());
+        (r.final_url.clone().unwrap_or_else(|| r.url.clone()), referrer)
+    };
+    crate::fileio::mark_from_internet(&final_path, &url, referrer.as_deref());
     Ok(())
 }
 
@@ -591,6 +639,7 @@ async fn run_media(
 
     let path = result?;
     let len = std::fs::metadata(&path)?.len();
+    crate::fileio::mark_from_internet(&path, &url, None);
     let mut r = shared.record.lock();
     if let (Some(name), Some(dir)) = (path.file_name(), path.parent()) {
         r.filename = name.to_string_lossy().into_owned();
@@ -879,6 +928,30 @@ async fn flush(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auth_headers_stay_on_origin() {
+        let mut h = BTreeMap::new();
+        h.insert("Cookie".to_string(), "session=secret".to_string());
+        h.insert("Authorization".to_string(), "Bearer x".to_string());
+        h.insert("Referer".to_string(), "https://site.fr/page".to_string());
+        let same = headers_for("https://site.fr/f.zip", "https://site.fr/autre/f.zip", &h);
+        assert!(same.contains_key("cookie") && same.contains_key("authorization"));
+        let cdn = headers_for("https://site.fr/f.zip", "https://cdn.autre.net/f.zip", &h);
+        assert!(!cdn.contains_key("cookie") && !cdn.contains_key("authorization"));
+        assert!(cdn.contains_key("referer"), "le Referer n'est pas un identifiant");
+        // Même hôte mais autre port ou HTTP : autre origine.
+        assert!(!same_origin("https://site.fr/a", "http://site.fr/a"));
+        assert!(!same_origin("https://site.fr/a", "https://site.fr:8443/a"));
+    }
+
+    #[test]
+    fn https_to_http_is_a_downgrade() {
+        let u = |s: &str| url::Url::parse(s).unwrap();
+        assert!(is_downgrade(&u("https://a.fr/x"), &u("http://b.fr/x")));
+        assert!(!is_downgrade(&u("http://a.fr/x"), &u("https://b.fr/x")));
+        assert!(!is_downgrade(&u("https://a.fr/x"), &u("https://b.fr/x")));
+    }
 
     #[test]
     fn content_range() {

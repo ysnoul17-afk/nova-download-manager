@@ -206,7 +206,7 @@ export const api = {
   pauseAll: () => invoke<void>("pause_all"),
   resumeAll: () => invoke<void>("resume_all"),
   history: (query: HistoryQuery) => invoke<DownloadInfo[]>("query_history", { query }),
-  openFile: (id: string) => invoke<void>("open_file", { id }),
+  openFile: (id: string, confirmed = false) => invoke<void>("open_file", { id, confirmed }),
   openFolder: (id: string) => invoke<void>("open_folder", { id }),
   getConfig: () => invoke<EngineConfig>("get_engine_config"),
   setConfig: (config: EngineConfig) => invoke<EngineConfig>("set_engine_config", { config }),

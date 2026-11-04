@@ -2612,7 +2612,7 @@ dependencies = [
 
 [[package]]
 name = "ndm-engine"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "axum",
  "futures-util",
@@ -2635,7 +2635,7 @@ dependencies = [
 
 [[package]]
 name = "ndm-ipc"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "dirs 7.0.0",
  "getrandom 0.4.3",
@@ -2647,7 +2647,7 @@ dependencies = [
 
 [[package]]
 name = "ndm-native-host"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "ndm-ipc",
  "serde_json",
@@ -2698,7 +2698,7 @@ dependencies = [
 
 [[package]]
 name = "nova-download-manager"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "dirs 7.0.0",
  "ndm-engine",

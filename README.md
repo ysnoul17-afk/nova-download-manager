@@ -76,3 +76,4 @@ l'extension, application arrêtée puis relancée automatiquement.
 - Utilisation : [docs/GUIDE-UTILISATEUR.md](docs/GUIDE-UTILISATEUR.md)
 - Architecture et choix techniques : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Publier une version et activer les mises à jour : [docs/PUBLICATION.md](docs/PUBLICATION.md)
+- Audit de sécurité : [docs/AUDIT-SECURITE.md](docs/AUDIT-SECURITE.md)

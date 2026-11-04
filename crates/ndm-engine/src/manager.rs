@@ -131,7 +131,13 @@ impl Engine {
 
         let mut map = BTreeMap::new();
         let mut max_seq = 0;
+        let mut purged = Vec::new();
         for mut r in store.load_all()? {
+            // Versions antérieures : identifiants conservés après la fin. On les efface.
+            if r.status == DownloadStatus::Completed && r.headers.keys().any(|k| download::is_sensitive_header(k)) {
+                r.headers.retain(|k, _| !download::is_sensitive_header(k));
+                purged.push(r.clone());
+            }
             // Les téléchargements interrompus par la fermeture reprennent automatiquement.
             if r.status.is_active() {
                 r.status = DownloadStatus::Queued;
@@ -141,6 +147,10 @@ impl Engine {
             }
             max_seq = max_seq.max(r.seq);
             map.insert(r.id, Arc::new(Entry::new(r)));
+        }
+
+        if !purged.is_empty() {
+            store.upsert_many(&purged)?;
         }
 
         let (events, _) = broadcast::channel(1024);
@@ -562,6 +572,8 @@ impl Inner {
                 r.active_ms += elapsed;
                 match res {
                     Ok(()) => {
+                        // Plus besoin des identifiants (cookies…) : on ne les garde pas sur le disque.
+                        r.headers.retain(|k, _| !download::is_sensitive_header(k));
                         r.status = DownloadStatus::Completed;
                         r.completed_at = Some(now_ms());
                         r.error = None;
