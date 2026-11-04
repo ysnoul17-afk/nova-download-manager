@@ -1,8 +1,9 @@
 # Publication d'une version : compile l'installateur Windows sur les serveurs de GitHub,
 # signe les artefacts de mise à jour et publie la version (installateurs, latest.json, extension).
 #
-# Déclenchement : pousser une étiquette « vX.Y.Z » identique à la version de tauri.conf.json.
-#   git tag v0.4.0 && git push origin v0.4.0
+# Déclenchement : un envoi sur « main » dont la version (apps/desktop/src-tauri/tauri.conf.json)
+# n'a pas encore d'étiquette « vX.Y.Z ». L'étiquette et la page de version sont créées ici.
+# Un envoi sans changement de version ne publie rien. Lancement manuel possible (onglet Actions).
 #
 # Secrets du dépôt requis (Settings > Secrets and variables > Actions) :
 #   TAURI_SIGNING_PRIVATE_KEY           contenu du fichier ndm-updater.key
@@ -11,14 +12,40 @@ name: Publication
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: publication
+  cancel-in-progress: false
+
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          VERSION=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          TAG="v$VERSION"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "La version $TAG est déjà publiée : rien à faire."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nouvelle version à publier : $TAG"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
   windows:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +58,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Tests (moteur, communication navigateur, application)
+      - name: Tests (moteur, communication navigateur)
         run: cargo test -p ndm-engine -p ndm-ipc -p ndm-native-host --release
 
       - name: Dépendances de l'interface
@@ -54,8 +81,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: Nova Download Manager ${{ github.ref_name }}
+          tagName: ${{ needs.version.outputs.tag }}
+          releaseCommitish: ${{ github.sha }}
+          releaseName: Nova Download Manager ${{ needs.version.outputs.tag }}
           releaseBody: |
             Installation : téléchargez « Nova.Download.Manager_*_x64-setup.exe ».
             Extension Chrome / Edge : « nova-download-manager-extension.zip » (à décompresser, puis « Charger l'extension non empaquetée »).
@@ -66,8 +94,7 @@ jobs:
           args: --config src-tauri/tauri.release.conf.json
 
       - name: Joindre l'extension à la version
-        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" nova-download-manager-extension.zip --clobber
+        run: gh release upload "${{ needs.version.outputs.tag }}" nova-download-manager-extension.zip --clobber --repo "${{ github.repository }}"

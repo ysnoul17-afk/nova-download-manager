@@ -23,14 +23,12 @@ au dépôt.** Si vous les perdez, les versions déjà installées ne pourront pl
 
 1. Mettre le même numéro dans `Cargo.toml` (`[workspace.package]`), `crates/ndm-engine/Cargo.toml`,
    `apps/desktop/package.json` et `apps/desktop/src-tauri/tauri.conf.json`.
-2. Créer et pousser l'étiquette correspondante :
-   ```
-   git tag v0.4.1
-   git push origin v0.4.1
-   ```
-3. Le workflow *Publication* (`.github/workflows/release.yml`) s'exécute sur un serveur Windows de GitHub :
-   tests, compilation, signature des artefacts de mise à jour, puis création de la Release avec
-   l'installateur `.exe`, le `.msi`, `latest.json` et l'extension en `.zip`. Durée : 15 à 25 minutes.
+2. Envoyer le code sur `main`. Le workflow *Publication* (`.github/workflows/release.yml`) voit qu'aucune
+   étiquette `vX.Y.Z` n'existe pour ce numéro et publie la version ; un envoi sans changement de numéro ne
+   publie rien. Il peut aussi être lancé à la main depuis l'onglet *Actions*.
+3. Sur un serveur Windows de GitHub : tests, compilation, signature des artefacts de mise à jour, création de
+   l'étiquette et de la Release avec l'installateur `.exe`, le `.msi`, `latest.json` et l'extension en `.zip`.
+   Durée : 15 à 25 minutes.
 4. Au démarrage suivant, les NDM installés affichent « Version x.y.z disponible » dans la barre d'état.
 
 La compilation locale (`scripts\build-windows.ps1`) ne produit pas d'artefacts de mise à jour et n'a pas
